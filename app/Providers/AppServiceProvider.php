@@ -12,6 +12,8 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Inertia\ExceptionResponse;
+use Inertia\Inertia;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -34,6 +36,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Inertia::handleExceptionsUsing(function (ExceptionResponse $response): ?ExceptionResponse {
+            if (! $response->request->expectsJson() && ! $response->request->is('api/*', 'admin/*') && in_array($response->statusCode(), [403, 404, 410, 500, 503], true)) {
+                return $response->render('error', ['status' => $response->statusCode()]);
+            }
+
+            return null;
+        });
+
         RateLimiter::for('login', function (Request $request) {
             $email = strtolower((string) $request->input('email', ''));
 

@@ -1,29 +1,16 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import Container from '../../components/Container';
 import Button from '../../components/UI/Button';
+import Input from '../../components/UI/Input';
 
 export default function Register() {
     const form = useForm({ name: '', email: '', password: '', password_confirmation: '' });
-
-    return (
-        <Container className="max-w-md my-12">
-            <h1 className="text-2xl font-bold mb-6">Account aanmaken</h1>
-            <form
-                className="space-y-3"
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    form.post('/register');
-                }}
-            >
-                <input className="w-full border rounded-md px-3 py-2" placeholder="Naam" value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />
-                <input className="w-full border rounded-md px-3 py-2" type="email" placeholder="E-mail" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} required />
-                <input className="w-full border rounded-md px-3 py-2" type="password" placeholder="Wachtwoord" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} required />
-                <input className="w-full border rounded-md px-3 py-2" type="password" placeholder="Bevestig wachtwoord" value={form.data.password_confirmation} onChange={(e) => form.setData('password_confirmation', e.target.value)} required />
-                <Button type="submit" variant="primary" className="w-full justify-center" disabled={form.processing}>Registreren</Button>
-            </form>
-            <p className="mt-4 text-sm text-gray-600">
-                Al een account? <Link href="/login" className="underline">Inloggen</Link>
-            </p>
-        </Container>
-    );
+    return <Container className="max-w-md my-12 space-y-6">
+        <Head title="Account aanmaken" /><h1 className="text-2xl font-bold">Account aanmaken</h1>
+        <form className="space-y-4" onSubmit={e => { e.preventDefault(); form.post('/register', { onFinish: () => form.reset('password', 'password_confirmation') }); }}>
+            {[['name', 'Naam'], ['email', 'E-mail'], ['password', 'Wachtwoord'], ['password_confirmation', 'Bevestig wachtwoord']].map(([field, label]) => <Input key={field} label={label} name={field} type={field.startsWith('password') ? 'password' : field === 'email' ? 'email' : 'text'} autoComplete={field.startsWith('password') ? 'new-password' : field} value={form.data[field]} onChange={e => form.setData(field, e.target.value)} error={form.errors[field]} required />)}
+            <Button type="submit" variant="primary" className="min-h-11 w-full" disabled={form.processing}>{form.processing ? 'Account aanmaken…' : 'Registreren'}</Button>
+        </form>
+        <p>Al een account? <Link href="/login" className="underline">Inloggen</Link></p>
+    </Container>;
 }

@@ -37,3 +37,6 @@ Schedule::command('orders:release-unpaid-stock')
     ->hourly()
     ->withoutOverlapping()
     ->onOneServer();
+
+Schedule::command('bricqer:sync-orders')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+Schedule::command('stock:notify-restocked')->everyFiveMinutes()->withoutOverlapping()->onOneServer();

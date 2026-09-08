@@ -20,7 +20,7 @@ class CartController extends Controller
             'quantity' => ['required', 'integer', 'min:1'],
         ]);
 
-        $product = Product::findOrFail($validated['product_id']);
+        $product = Product::query()->whereKey($validated['product_id'])->firstOrFail();
 
         $this->cartService->addItem($product, $validated['quantity']);
 

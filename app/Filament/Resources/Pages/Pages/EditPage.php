@@ -12,6 +12,22 @@ class EditPage extends EditRecord
 {
     protected static string $resource = PageResource::class;
 
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $data['blocks'] = array_map(fn (array $block): array => isset($block['columns'])
+            ? ['type' => 'legacy', 'data' => ['row' => $block]] : $block, $data['blocks'] ?? []);
+
+        return $data;
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $data['blocks'] = array_map(fn (array $block): array => ($block['type'] ?? null) === 'legacy'
+            ? $block['data']['row'] : $block, $data['blocks'] ?? []);
+
+        return $data;
+    }
+
     protected function getHeaderActions(): array
     {
         return [

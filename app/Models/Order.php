@@ -40,16 +40,31 @@ class Order extends Model
         'payment_method',
     ];
 
-    /**
-     * @return array<string, string>
-     */
+    /** @return array{paid_at: 'datetime', stock_reserved_at: 'datetime', meta: 'array', billing_address: 'array', shipping_address: 'array', stock_held: 'boolean', exported_at: 'datetime', synced_at: 'datetime'} */
     protected function casts(): array
     {
         return [
             'paid_at' => 'datetime',
             'stock_reserved_at' => 'datetime',
             'meta' => 'array',
+            'billing_address' => 'array',
+            'shipping_address' => 'array',
+            'stock_held' => 'boolean',
+            'exported_at' => 'datetime',
+            'synced_at' => 'datetime',
         ];
+    }
+
+    public function paymentExpiresAt(): ?\Carbon\Carbon
+    {
+        return $this->stock_reserved_at?->copy()->addMinutes((int) config('orders.reservation_ttl_minutes', 60));
+    }
+
+    public function canPay(): bool
+    {
+        return $this->status === 'pending_payment'
+            && $this->paid_at === null
+            && $this->paymentExpiresAt()?->isFuture() === true;
     }
 
     /**

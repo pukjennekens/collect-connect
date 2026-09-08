@@ -62,7 +62,7 @@ class ImportMinifigImagesCommand extends Command
         // Collect ids first so --limit works (lazyById ignores query limit).
         // Eligibility is based on missing media, not bricqer_image_url, so failed
         // downloads can be retried.
-        $ids = Minifig::query()
+        $query = Minifig::query()
             ->whereDoesntHave('media', function ($query): void {
                 $query->where('collection_name', Minifig::BRICQER_IMAGE_COLLECTION);
             })
@@ -83,9 +83,11 @@ class ImportMinifigImagesCommand extends Command
                     ->where('productable_type', $morph)
                     ->select('productable_id'));
             })
-            ->orderBy('id')
-            ->when($limit !== null, fn ($query) => $query->limit($limit))
-            ->pluck('id');
+            ->orderBy('id');
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+        $ids = $query->pluck('id');
 
         return LazyCollection::make(function () use ($ids) {
             foreach ($ids->chunk(100) as $chunk) {

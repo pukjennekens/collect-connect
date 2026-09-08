@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\SyncRuns;
 
-use App\Filament\Resources\SyncRuns\Pages\CreateSyncRun;
-use App\Filament\Resources\SyncRuns\Pages\EditSyncRun;
 use App\Filament\Resources\SyncRuns\Pages\ListSyncRuns;
 use App\Filament\Resources\SyncRuns\Schemas\SyncRunForm;
 use App\Filament\Resources\SyncRuns\Tables\SyncRunsTable;
@@ -21,6 +19,21 @@ class SyncRunResource extends Resource
     protected static ?string $model = SyncRun::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return false;
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -43,8 +56,6 @@ class SyncRunResource extends Resource
     {
         return [
             'index' => ListSyncRuns::route('/'),
-            'create' => CreateSyncRun::route('/create'),
-            'edit' => EditSyncRun::route('/{record}/edit'),
         ];
     }
 }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Domain\Order\Jobs;
 
 use App\Models\Order;
-use App\Models\Product;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -49,7 +48,7 @@ class ReleaseUnpaidOrderStockJob implements ShouldQueue
     private function releaseOrder(Order $order): bool
     {
         return DB::transaction(function () use ($order): bool {
-            /** @var Order $locked */
+            /** @var Order|null $locked */
             $locked = Order::query()->lockForUpdate()->find($order->id);
 
             if (
@@ -62,15 +61,7 @@ class ReleaseUnpaidOrderStockJob implements ShouldQueue
 
             $locked->load('items');
 
-            foreach ($locked->items as $item) {
-                if ($item->product_id === null) {
-                    continue;
-                }
-
-                Product::query()
-                    ->whereKey($item->product_id)
-                    ->increment('stock', (int) $item->quantity);
-            }
+            app(\App\Domain\Product\Services\StockService::class)->release($locked);
 
             $meta = $locked->meta ?? [];
             $meta['stock_released_at'] = now()->toIso8601String();
@@ -78,11 +69,12 @@ class ReleaseUnpaidOrderStockJob implements ShouldQueue
 
             $locked->forceFill([
                 'status' => 'cancelled',
+                'payment_status' => 'cancelled',
                 'stock_reserved_at' => null,
                 'meta' => $meta,
             ])->save();
 
             return true;
-        });
+        }, 3);
     }
 }

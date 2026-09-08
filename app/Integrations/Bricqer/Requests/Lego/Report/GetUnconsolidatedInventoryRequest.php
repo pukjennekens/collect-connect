@@ -6,8 +6,8 @@ namespace App\Integrations\Bricqer\Requests\Lego\Report;
 
 use App\Integrations\Bricqer\DataTransferObjects\UnconsolidatedInventory\InventoryItem;
 use Generator;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\LazyCollection;
+use RuntimeException;
 use Saloon\Enums\Method;
 use Saloon\Http\Request;
 use Saloon\Http\Response;
@@ -42,6 +42,7 @@ class GetUnconsolidatedInventoryRequest extends Request
     {
         return [
             'stream' => true,
+            'timeout' => 1700,
         ];
     }
 
@@ -106,7 +107,7 @@ class GetUnconsolidatedInventoryRequest extends Request
                 }
 
                 if ($skipped > 0) {
-                    Log::warning('Skipped malformed Bricqer inventory rows.', ['skipped' => $skipped]);
+                    throw new RuntimeException('Malformed Bricqer inventory rows; refusing partial stock synchronization.');
                 }
             } finally {
                 fclose($stream);

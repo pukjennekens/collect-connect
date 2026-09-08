@@ -9,10 +9,12 @@ use App\Domain\Shipping\ShippingMethodResolver;
 use App\Http\Requests\Checkout\StoreCheckoutRequest;
 use App\Http\Resources\Order\OrderResource;
 use App\Models\Order;
+use App\Models\ShippingMethod;
 use App\Services\CartService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Response;
 
@@ -34,15 +36,25 @@ class CheckoutController extends Controller
 
         $user = Auth::user();
         $address = $user?->addresses()->where('is_default', true)->first();
-        $country = strtoupper((string) request()->query('country', $address?->country_code ?? 'NL'));
+        $country = strtoupper((string) request()->query('country', data_get($address, 'country_code', 'NL')));
 
         try {
-            $shippingMethods = $this->shipping->availableForCountry($country);
+            $weight = $items->contains(fn (array $item): bool => $item['weight_grams'] === null) ? null : (float) $items->sum(fn (array $item): float => $item['weight_grams'] * $item['quantity']);
+            $shippingMethods = $this->shipping->availableForCountry($country, $weight);
         } catch (ValidationException $exception) {
-            return redirect()->route('cart.show')->withErrors($exception->errors());
+            $shippingMethods = [];
         }
 
+        if (! session('checkout.token') || Order::query()->where('checkout_token', session('checkout.token'))->exists()) {
+            session(['checkout.token' => (string) Str::uuid()]);
+        }
+        session(['checkout.review' => $this->fingerprint($items), 'checkout.shipping' => collect($shippingMethods)->pluck('price_cents', 'id')->all()]);
+
         return inertia('checkout/index', [
+            'checkoutToken' => session('checkout.token'),
+            'addresses' => $user?->addresses()->orderByDesc('is_default')->get() ?? [],
+            'countries' => ShippingMethod::query()->where('is_active', true)->get()->flatMap(fn (ShippingMethod $method): array => array_keys($method->country_regions ?? []))->unique()->values(),
+            'shippingError' => $shippingMethods === [] ? 'Geen passende verzendmethode beschikbaar voor het land en artikelgewicht.' : null,
             'items' => $items,
             'subtotal' => $items->sum(fn (array $i): float => $i['price'] * $i['quantity']),
             'weight_grams' => $this->cartService->getTotalWeightGrams(),
@@ -56,14 +68,39 @@ class CheckoutController extends Controller
 
     public function store(StoreCheckoutRequest $request, PlaceOrderAction $placeOrder): RedirectResponse
     {
-        $this->cartService->revalidateStock();
-        $items = $this->cartService->getItems();
+        $token = $request->validated('checkout_token') ?? session('checkout.token') ?? (string) Str::uuid();
+        if (! session('checkout.token')) {
+            session(['checkout.token' => $token]);
+        }
 
+        return \Illuminate\Support\Facades\Cache::lock('checkout:'.$token, 120)->block(10, fn (): RedirectResponse => $this->storeOnce($request, $placeOrder));
+    }
+
+    private function storeOnce(StoreCheckoutRequest $request, PlaceOrderAction $placeOrder): RedirectResponse
+    {
+        $validated = $request->validated();
+        $token = $validated['checkout_token'] ?? session('checkout.token');
+        if (! $token) {
+            $token = (string) Str::uuid();
+            session(['checkout.token' => $token]);
+        }
+        if ($existing = Order::query()->where('checkout_token', $token)->first()) {
+            abort_unless(Gate::allows('viewPlaced', $existing), 403);
+
+            return $this->orderRedirect($placeOrder->initiatePayment($existing));
+        }
+        abort_unless($token === session('checkout.token'), 419);
+        $messages = $this->cartService->revalidateStock();
+        $items = $this->cartService->getItems();
         if ($items->isEmpty()) {
             return redirect()->route('cart.show');
         }
-
+        if ($messages !== [] || (session()->has('checkout.review') && session('checkout.review') !== $this->fingerprint($items))) {
+            return redirect()->route('checkout.show')->withErrors(['cart' => 'Je winkelwagen of prijzen zijn gewijzigd. Controleer het overzicht en bevestig opnieuw.']);
+        }
         $validated = $request->validated();
+        $validated['checkout_token'] = $token;
+        $validated['reviewed_shipping_cents'] = session('checkout.shipping.'.(int) $validated['shipping_method_id']);
         $country = strtoupper($validated['country_code']);
 
         try {
@@ -76,23 +113,24 @@ class CheckoutController extends Controller
             return back()->withErrors($exception->errors());
         }
 
-        if (($validated['create_account'] ?? false) && Auth::check()) {
-            $request->session()->regenerate();
-            $this->cartService->mergeGuestCartIntoUser(Auth::id());
+        return $this->orderRedirect($order);
+    }
+
+    private function orderRedirect(Order $order): RedirectResponse
+    {
+        if ($order->status === 'pending_payment' && $order->paid_at === null && filled(data_get($order->meta, 'redirect_url'))) {
+            return redirect()->away(data_get($order->meta, 'redirect_url'));
         }
 
-        // Gateways that host their own payment page take over from here.
-        $redirectUrl = data_get($order->meta, 'redirect_url');
+        return Auth::check() ? redirect()->route('account.orders.show', $order) : redirect()->route('checkout.confirmation', $order);
+    }
 
-        if (filled($redirectUrl)) {
-            return redirect()->away($redirectUrl);
-        }
-
-        if (Auth::check()) {
-            return redirect()->route('account.orders.show', $order)->with('status', 'Bestelling geplaatst.');
-        }
-
-        return redirect()->route('checkout.confirmation', $order)->with('status', 'Bestelling geplaatst.');
+    /** @param \Illuminate\Support\Collection<int, covariant array<string, mixed>> $items */
+    private function fingerprint(\Illuminate\Support\Collection $items): string
+    {
+        return hash('sha256', $items->map(fn (array $item): array => [
+            'id' => $item['id'], 'quantity' => $item['quantity'], 'price' => $item['price'],
+        ])->sortBy('id')->values()->toJson());
     }
 
     public function confirmation(Order $order): Response

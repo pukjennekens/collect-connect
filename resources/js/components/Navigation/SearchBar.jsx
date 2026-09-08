@@ -14,7 +14,7 @@ export default function SearchBar({onOpen}) {
         <>
             {/* Desktop version - trigger button */}
             <button
-                onClick={handleOpen}
+                aria-label="Zoeken" onClick={handleOpen}
                 className="hidden sm:flex w-full max-w-md bg-accent px-4 py-2 border border-gray-200 rounded-md gap-2 items-center cursor-pointer hover:bg-gray-50 transition mr-auto lg:mr-0"
             >
                 <ListMagnifyingGlassIcon size={20}/>
@@ -22,7 +22,7 @@ export default function SearchBar({onOpen}) {
             </button>
 
             {/* Mobile version - icon only */}
-            <Button onClick={handleOpen} iconOnly className="sm:hidden mr-auto">
+            <Button aria-label="Zoeken" onClick={handleOpen} iconOnly className="sm:hidden mr-auto">
                 <ListMagnifyingGlassIcon size={24}/>
             </Button>
         </>

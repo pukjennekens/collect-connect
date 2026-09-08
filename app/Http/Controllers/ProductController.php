@@ -6,14 +6,17 @@ namespace App\Http\Controllers;
 
 use App\Domain\Product\Queries\ProductListingQuery;
 use App\Http\Resources\Product\ProductResource;
+use App\Http\Resources\Set\SetResource;
 use App\Models\Minifig;
 use App\Models\Part;
 use App\Models\Product;
+use App\Models\Set;
+use Illuminate\Http\Request;
 use Inertia\Response;
 
 class ProductController extends Controller
 {
-    public function show(Product $product): Response
+    public function show(Request $request, Product $product): Response
     {
         $product->load(ProductListingQuery::defaultWith());
 
@@ -31,7 +34,7 @@ class ProductController extends Controller
                 })
                 ->where('id', '!=', $product->id)
                 ->where('productable_id', '!=', $product->productable_id)
-                ->where('stock', '>', 0)
+                ->purchasable()
                 ->with(ProductListingQuery::forType('part'))
                 ->limit(10)
                 ->get()
@@ -42,16 +45,25 @@ class ProductController extends Controller
             $suggestions = Product::query()
                 ->whereMorphedTo('productable', Minifig::class)
                 ->where('id', '!=', $product->id)
-                ->where('stock', '>', 0)
+                ->purchasable()
                 ->with(ProductListingQuery::forType('minifig'))
                 ->orderByDesc('stock')
                 ->limit(10)
                 ->get();
         }
 
+        $relatedSets = Set::query()->with('media')->whereHas('latestInventory', function ($inventory) use ($product): void {
+            if ($product->productable instanceof Part) {
+                $inventory->whereHas('parts', fn ($parts) => $parts->where('parts.id', $product->productable_id)->where('inventory_parts.color_id', $product->color_id));
+            } else {
+                $inventory->whereHas('minifigs', fn ($minifigs) => $minifigs->where('minifigs.id', $product->productable_id));
+            }
+        })->orderByDesc('year')->paginate(12, pageName: 'sets_page')->withQueryString();
+
         return inertia('shop/product', [
             'product' => ProductResource::make($product),
             'suggestions' => ProductResource::collection($suggestions),
+            'related_sets' => SetResource::collection($relatedSets),
         ]);
     }
 }

@@ -9,14 +9,28 @@ jobs:
   phpunit:
     runs-on: ubuntu-latest
 
+    services:
+      mysql:
+        image: mysql:9.0
+        env:
+          MYSQL_ROOT_PASSWORD: testing
+          MYSQL_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptesting"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
-          extensions: mbstring, pdo_sqlite, zip, intl
+          php-version: '8.5'
+          extensions: mbstring, pdo_sqlite, pdo_mysql, zip, intl
           coverage: none
 
       - name: Install Composer dependencies
@@ -38,3 +52,24 @@ jobs:
           SCOUT_DRIVER: collection
           MAIL_MAILER: array
         run: php artisan test --compact
+
+      - name: Verify MySQL stock concurrency
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: testing
+          DB_USERNAME: root
+          DB_PASSWORD: testing
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          SCOUT_DRIVER: collection
+        run: php artisan test --compact tests/Feature/Domain/Product/MySqlStockCurrentReadTest.php
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Build frontend
+        run: npm ci --include=optional && npm run build

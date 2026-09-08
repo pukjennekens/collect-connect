@@ -24,6 +24,7 @@ class ProductColorImageTest extends TestCase
         parent::setUp();
 
         Storage::fake('public');
+        config(['media-library.queue_conversions_by_default' => false]);
     }
 
     public function test_product_resource_returns_the_bricqer_image_for_its_own_color(): void

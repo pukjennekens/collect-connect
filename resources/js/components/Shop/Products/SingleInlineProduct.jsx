@@ -37,7 +37,7 @@ export default function SingleInlineProduct({ product, quantityInSet }) {
                 )}
             </div>
 
-            <h3 className="truncate text-sm font-medium text-gray-900">
+            <h3 className="line-clamp-2 min-h-10 text-sm font-medium text-gray-900">
                 {product.title}
             </h3>
 
@@ -64,7 +64,7 @@ export default function SingleInlineProduct({ product, quantityInSet }) {
                             )}
                         </div>
 
-                        <h3 className="truncate text-sm font-medium text-gray-900 group-hover:underline">
+                        <h3 className="line-clamp-2 min-h-10 text-sm font-medium text-gray-900 group-hover:underline">
                             {product.title}
                         </h3>
 
@@ -82,6 +82,8 @@ export default function SingleInlineProduct({ product, quantityInSet }) {
                 </div>
             )}
 
+            {product.color && <p className="text-xs text-gray-500">{product.color.name}</p>}
+            {product.is_spare && <p className="text-xs text-gray-500">Reserveonderdeel</p>}
             {isAvailableInCatalog ? (
                 <AddToCartButton product={product} />
             ) : (

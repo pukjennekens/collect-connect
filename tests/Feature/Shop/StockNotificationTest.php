@@ -35,4 +35,29 @@ class StockNotificationTest extends TestCase
             'email' => 'buyer@example.com',
         ]);
     }
+
+    public function test_subscription_can_be_reactivated_without_duplicates(): void
+    {
+        $product = Product::factory()->for(Part::factory(), 'productable')->create(['stock' => 0]);
+        $subscription = StockNotification::query()->create(['product_id' => $product->id, 'email' => 'buyer@example.com', 'notified_at' => now()]);
+        $this->post(route('products.stock-notifications.store', $product), ['email' => 'buyer@example.com'])->assertRedirect();
+        $this->post(route('products.stock-notifications.store', $product), ['email' => 'buyer@example.com'])->assertRedirect();
+        $this->assertNull($subscription->fresh()->notified_at);
+        $this->assertDatabaseCount('stock_notifications', 1);
+    }
+
+    public function test_notification_only_sends_once_after_restock(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+        $product = Product::factory()->for(Part::factory(), 'productable')->create(['stock' => 0]);
+        $subscription = StockNotification::query()->create(['product_id' => $product->id, 'email' => 'buyer@example.com']);
+        $job = new \App\Domain\Bricqer\Jobs\DispatchStockNotificationsJob([$product->id]);
+        $job->handle();
+        \Illuminate\Support\Facades\Mail::assertNothingSent();
+        $product->update(['stock' => 2]);
+        $job->handle();
+        $job->handle();
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\StockBackInStockMail::class, 1);
+        $this->assertNotNull($subscription->fresh()->notified_at);
+    }
 }

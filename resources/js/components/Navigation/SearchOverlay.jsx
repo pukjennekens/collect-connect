@@ -48,10 +48,12 @@ export default function SearchOverlay({ isOpen, origin, onClose, menu = [] }) {
     const contentRef = useRef(null);
     const inputRef = useRef(null);
     const timelineRef = useRef(null);
+    const returnFocusRef = useRef(null);
 
     // Mount on open; unmount only after the close animation has finished.
     useEffect(() => {
         if (isOpen) {
+            returnFocusRef.current = document.activeElement;
             setMounted(true);
         }
     }, [isOpen]);
@@ -74,6 +76,13 @@ export default function SearchOverlay({ isOpen, origin, onClose, menu = [] }) {
         }
 
         const handleKeyDown = (e) => {
+            if (e.key === 'Tab') {
+                const controls = [...panelRef.current.querySelectorAll('a[href], button:not([disabled]), input, select, [tabindex="0"]')].filter(element => element.getClientRects().length > 0);
+                const first = controls[0];
+                const last = controls.at(-1);
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+                if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+            }
             if (e.key === "Escape") {
                 onClose();
                 return;
@@ -93,7 +102,8 @@ export default function SearchOverlay({ isOpen, origin, onClose, menu = [] }) {
 
         return () => {
             window.removeEventListener("keydown", handleKeyDown);
-            document.body.style.overflow = "unset";
+            document.body.style.overflow = "";
+            returnFocusRef.current?.focus();
         };
     }, [mounted, onClose]);
 
@@ -152,7 +162,7 @@ export default function SearchOverlay({ isOpen, origin, onClose, menu = [] }) {
         setMode("menu");
         tl.eventCallback("onReverseComplete", () => setMounted(false));
         tl.reverse();
-    }, [isOpen]);
+    }, [isOpen, mounted]);
 
     const navigate = (href) => {
         onClose();
@@ -178,7 +188,7 @@ export default function SearchOverlay({ isOpen, origin, onClose, menu = [] }) {
     }
 
     return (
-        <div ref={rootRef} className="fixed inset-0 z-50">
+        <div ref={rootRef} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Zoeken en navigatie">
             <div
                 ref={backdropRef}
                 className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -198,13 +208,15 @@ export default function SearchOverlay({ isOpen, origin, onClose, menu = [] }) {
                         </div>
                         <input
                             ref={inputRef}
-                            type="text"
+                            type="search"
+                            aria-label="Zoek op naam of LEGO-nummer"
+                            onKeyDown={(event) => { if (event.key === 'Enter' && query.trim()) { event.preventDefault(); navigate(`/zoeken?q=${encodeURIComponent(query.trim())}`); } }}
                             value={query}
                             onChange={(e) => handleQueryChange(e.target.value)}
                             placeholder="Zoek op naam, onderdelen, minifiguren, lego-nummer..."
-                            className="flex-1 text-lg bg-transparent outline-none placeholder-gray-400"
+                            className="min-w-0 flex-1 text-lg bg-transparent outline-none placeholder-gray-400"
                         />
-                        <Button onClick={onClose} iconOnly className="shrink-0">
+                        <Button onClick={onClose} aria-label="Zoeken sluiten" iconOnly className="shrink-0">
                             <X size={24} />
                         </Button>
                     </div>

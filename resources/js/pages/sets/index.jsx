@@ -1,4 +1,5 @@
 import { Link, router } from '@inertiajs/react';
+import Pagination from '../../components/UI/Pagination';
 import Container from '../../components/Container';
 import InlineSet from '../../components/Shop/Sets/InlineSet';
 
@@ -16,7 +17,7 @@ export default function SetsIndex({ sets, query }) {
                     }}
                 >
                     <input
-                        name="q"
+                        aria-label="Zoek setnummer of naam" name="q"
                         defaultValue={query ?? ''}
                         placeholder="Zoek setnummer of naam..."
                         className="border border-gray-200 rounded-lg px-4 py-2 w-full md:w-80"
@@ -24,6 +25,7 @@ export default function SetsIndex({ sets, query }) {
                 </form>
             </div>
 
+            <p className="mb-4 text-sm text-gray-600">{sets?.meta?.total ?? sets?.total ?? items.length} sets</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {items.map((set) => {
                     const s = set.data ?? set;
@@ -31,6 +33,7 @@ export default function SetsIndex({ sets, query }) {
                 })}
             </div>
 
+            <Pagination pagination={sets} />
             {items.length === 0 && (
                 <p className="text-gray-500">Geen sets gevonden.</p>
             )}

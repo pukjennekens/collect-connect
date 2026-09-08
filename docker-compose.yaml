@@ -27,6 +27,49 @@ services:
       networks:
         - laravel
 
+    queue:
+      build:
+        context: docker/
+        target: development
+        args:
+          USER_ID: ${USER_ID:-1000}
+          GROUP_ID: ${GROUP_ID:-1000}
+      command: ["php", "artisan", "queue:work", "--queue=default", "--tries=3", "--timeout=1800", "--max-time=3600"]
+      restart: unless-stopped
+      volumes:
+        - ./:/var/www/html
+      healthcheck:
+        disable: true
+      depends_on:
+        - mysql
+        - redis
+      networks:
+        - laravel
+
+    imports:
+      extends:
+        service: queue
+      command: ["php", "artisan", "queue:work", "--queue=imports", "--tries=3", "--timeout=1800", "--max-time=3600"]
+
+    scheduler:
+      build:
+        context: docker/
+        target: development
+        args:
+          USER_ID: ${USER_ID:-1000}
+          GROUP_ID: ${GROUP_ID:-1000}
+      command: ["php", "artisan", "schedule:work"]
+      restart: unless-stopped
+      volumes:
+        - ./:/var/www/html
+      healthcheck:
+        disable: true
+      depends_on:
+        - mysql
+        - redis
+      networks:
+        - laravel
+
     mysql:
       image: mysql:9.0
       ports:

@@ -25,7 +25,27 @@ services:
         context: .
         dockerfile: docker/Dockerfile
         target: production
-      command: ["php", "/var/www/html/artisan", "queue:work", "--tries=3", "--max-time=3600"]
+      command: ["php", "/var/www/html/artisan", "queue:work", "--tries=3", "--timeout=180", "--max-time=3600"]
+      restart: unless-stopped
+      env_file: .env
+      healthcheck:
+        disable: true
+      volumes:
+        - storage:/var/www/html/storage
+      depends_on:
+        mysql:
+          condition: service_healthy
+        redis:
+          condition: service_started
+      networks:
+        - laravel
+
+    imports:
+      build:
+        context: .
+        dockerfile: docker/Dockerfile
+        target: production
+      command: ["php", "/var/www/html/artisan", "queue:work", "--queue=imports", "--timeout=1800", "--tries=3", "--max-time=3600"]
       restart: unless-stopped
       env_file: .env
       healthcheck:

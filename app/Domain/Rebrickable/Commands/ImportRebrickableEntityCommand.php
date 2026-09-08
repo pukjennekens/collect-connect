@@ -15,32 +15,48 @@ use App\Domain\Rebrickable\Services\Imports\MinifigImportService;
 use App\Domain\Rebrickable\Services\Imports\PartCategoryImportService;
 use App\Domain\Rebrickable\Services\Imports\PartImportService;
 use App\Domain\Rebrickable\Services\Imports\SetImportService;
+use App\Domain\Rebrickable\Services\Imports\ThemeImportService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Bus;
 
 class ImportRebrickableEntityCommand extends Command
 {
-    protected $signature = 'rebrickable:import-entity {--entity=}';
+    protected $signature = 'rebrickable:import-entity {--entity=} {--sync : Run imports sequentially in the foreground}';
 
     /**
      * @var array<class-string<ImportsRebrickableEntity>, string>
      */
     protected array $importServices = [
+        ThemeImportService::class => 'themes',
         PartCategoryImportService::class => 'part_categories',
-        PartImportService::class => 'parts',
         ColorImportService::class => 'colors',
+        PartImportService::class => 'parts',
+        MinifigImportService::class => 'minifigs',
+        SetImportService::class => 'sets',
         InventoryImportService::class => 'inventories',
         InventoryPartImportService::class => 'inventory_parts',
-        MinifigImportService::class => 'minifigs',
         InventoryMinifigImportService::class => 'inventory_minifigs',
         InventorySetImportService::class => 'inventory_sets',
-        SetImportService::class => 'sets',
     ];
 
-    public function handle(): void
+    public function handle(): int
     {
-        foreach ($this->getImportServices() as $importService) {
-            ImportRebrickableEntityJob::dispatch($importService);
+        $services = $this->getImportServices();
+        if ($services === []) {
+            $this->error('Unknown Rebrickable entity.');
+
+            return self::FAILURE;
         }
+        if ($this->option('sync')) {
+            foreach ($services as $service) {
+                $this->info('Importing '.$this->importServices[$service]);
+                Bus::dispatchNow(new ImportRebrickableEntityJob($service));
+            }
+        } else {
+            Bus::chain(array_map(fn (string $service) => new ImportRebrickableEntityJob($service), $services))->onQueue('imports')->dispatch();
+        }
+
+        return self::SUCCESS;
     }
 
     /**

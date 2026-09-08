@@ -16,13 +16,19 @@ class StoreCheckoutRequest extends FormRequest
     }
 
     /**
-     * @return array<string, list<\Illuminate\Contracts\Validation\ValidationRule|string>>
+     * @return array<string, list<\Illuminate\Contracts\Validation\ValidationRule|\Illuminate\Contracts\Validation\Rule|\Illuminate\Validation\ConditionalRules|\Illuminate\Validation\Rules\RequiredIf|string>>
      */
     public function rules(): array
     {
-        $createAccount = $this->boolean('create_account');
+        $createAccount = $this->boolean('create_account') && $this->user() === null;
 
         return [
+            'checkout_token' => ['sometimes', 'uuid'],
+            'save_address' => ['sometimes', 'boolean'],
+            'house_number' => ['nullable', 'string', 'max:16'],
+            'house_addition' => ['nullable', 'string', 'max:16'],
+            'billing_same_as_shipping' => ['exclude'],
+            'billing' => ['exclude'],
             'name' => ['required', 'string', 'max:255'],
             'email' => [
                 'required',

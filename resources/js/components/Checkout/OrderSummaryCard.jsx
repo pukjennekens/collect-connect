@@ -16,14 +16,14 @@ const toCents = (euros) => Math.round(Number(euros) * 100);
  * @param {boolean} props.processing
  * @param {string} [props.error]
  */
-export default function OrderSummaryCard({ items, subtotal, shippingCents, processing, error }) {
+export default function OrderSummaryCard({ items, subtotal, shippingCents, processing, error, canSubmit = true }) {
     const { removeItem, processing: cartProcessing } = useCart();
 
     const subtotalCents = toCents(subtotal);
-    const totalCents = subtotalCents + shippingCents;
+    const totalCents = subtotalCents + (shippingCents ?? 0);
 
     return (
-        <Card className="p-6 lg:sticky lg:top-8">
+        <Card className="p-6 lg:sticky lg:top-44">
             <h2 className="text-lg font-semibold text-gray-900">Samenvatting van de bestelling</h2>
 
             <ul className="mt-4 max-h-80 divide-y divide-gray-100 overflow-y-auto">
@@ -48,7 +48,7 @@ export default function OrderSummaryCard({ items, subtotal, shippingCents, proce
 
                         <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
-                                <p className="truncate text-sm font-medium text-gray-900">
+                                <p className="break-words text-sm font-medium text-gray-900">
                                     {item.name}
                                 </p>
                                 <button
@@ -94,13 +94,13 @@ export default function OrderSummaryCard({ items, subtotal, shippingCents, proce
                 <div className="flex justify-between">
                     <dt className="text-gray-500">Verzending</dt>
                     <dd className="text-gray-900">
-                        <Price price={shippingCents} />
+                        {shippingCents === null ? "Nog niet beschikbaar" : <Price price={shippingCents} />}
                     </dd>
                 </div>
                 <div className="flex justify-between border-t border-gray-200 pt-3 text-base font-semibold">
                     <dt>Totaal</dt>
                     <dd>
-                        <Price price={totalCents} />
+                        {shippingCents === null ? "Nog te bepalen" : <Price price={totalCents} />}
                     </dd>
                 </div>
                 <p className="text-xs text-gray-400">Inclusief btw</p>
@@ -110,12 +110,12 @@ export default function OrderSummaryCard({ items, subtotal, shippingCents, proce
                 type="submit"
                 variant="primary"
                 className="mt-5 w-full justify-center"
-                disabled={processing}
+                disabled={processing || !canSubmit}
             >
                 {processing ? 'Bezig…' : 'Bestelling bevestigen'}
             </Button>
 
-            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+            {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
         </Card>
     );
 }

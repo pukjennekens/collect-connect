@@ -1,3 +1,5 @@
+import Pagination from '../../components/UI/Pagination';
+import { router } from '@inertiajs/react';
 import Container from '../../components/Container';
 import SingleInlineProduct from '../../components/Shop/Products/SingleInlineProduct.jsx';
 
@@ -7,7 +9,10 @@ import SingleInlineProduct from '../../components/Shop/Products/SingleInlineProd
  * @param {Array} props.in_stock_parts
  * @param {Array} props.out_of_stock_parts
  */
-export default function SetPage({ set: { data: set }, in_stock_parts, out_of_stock_parts }) {
+export default function SetPage({ set: { data: set }, in_stock_parts, out_of_stock_parts, filters, active, theme, parts, minifigs }) {
+    function updateFilter(key, value) {
+        router.get(set.url, { ...active, [key]: value || undefined }, { preserveState: true, preserveScroll: true });
+    }
     return (
         <Container className="max-w-250 my-8">
             <div className="py-10 grid grid-cols-1 md:grid-cols-5 gap-10 md:shadow-[0_0px_10px_rgba(0,0,0,0.1)] md:px-6 rounded-xl">
@@ -42,47 +47,25 @@ export default function SetPage({ set: { data: set }, in_stock_parts, out_of_sto
                 </div>
             </div>
 
-            {in_stock_parts.length > 0 && (
-                <div className="mt-10">
-                    <h2 className="text-xl font-semibold text-gray-900">
-                        Beschikbaar
-                        <span className="ml-2 text-base font-normal text-gray-400">
-                            ({in_stock_parts.length})
-                        </span>
-                    </h2>
-
-                    <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                        {in_stock_parts.map((part) => (
-                            <SingleInlineProduct
-                                key={part.id ?? part.lego_number}
-                                product={part}
-                                quantityInSet={part.quantity_in_set}
-                            />
-                        ))}
-                    </div>
+            {theme && <p className="mt-4 text-gray-600">Thema: {theme}</p>}
+            <div className="my-6 grid gap-4 sm:grid-cols-2">
+                {[['category_id', 'Categorie', filters?.categories], ['color_id', 'Kleur', filters?.colors]].map(([key, label, options]) => <label key={key} className="flex flex-col gap-2">
+                    {label}
+                    <select value={active?.[key] ?? ''} onChange={(event) => updateFilter(key, event.target.value)} className="rounded-md border border-gray-200 p-2">
+                        <option value="">Alles</option>
+                        {(options ?? []).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                    </select>
+                </label>)}
+            </div>
+            {(active?.category_id || active?.color_id) && <button onClick={() => router.get(set.url)} className="min-h-11 text-primary underline">Filters wissen</button>}
+            {[["Onderdelen", parts], ["Minifiguren", minifigs]].map(([label, listing]) => <section key={label} className="mt-10">
+                <h2 className="text-xl font-semibold">{label} <span className="text-base font-normal text-gray-600">({listing?.total ?? 0})</span></h2>
+                {!listing?.data?.length && <p className="mt-4 text-gray-600">Geen {label.toLowerCase()} gevonden voor deze selectie.</p>}
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {(listing?.data ?? []).map((product, index) => <SingleInlineProduct key={`${product.id}-${product.lego_number}-${product.color?.name}-${product.is_spare}-${index}`} product={product} quantityInSet={product.quantity_in_set} />)}
                 </div>
-            )}
-
-            {out_of_stock_parts.length > 0 && (
-                <div className="mt-10">
-                    <h2 className="text-xl font-semibold text-gray-900">
-                        Niet op voorraad
-                        <span className="ml-2 text-base font-normal text-gray-400">
-                            ({out_of_stock_parts.length})
-                        </span>
-                    </h2>
-
-                    <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                        {out_of_stock_parts.map((part, i) => (
-                            <SingleInlineProduct
-                                key={part.id ?? `${part.lego_number}-${i}`}
-                                product={part}
-                                quantityInSet={part.quantity_in_set}
-                            />
-                        ))}
-                    </div>
-                </div>
-            )}
+                <Pagination pagination={listing} label={`${label} paginering`} />
+            </section>)}
         </Container>
     );
 }

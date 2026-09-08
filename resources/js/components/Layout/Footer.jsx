@@ -2,19 +2,17 @@ import FooterLinks from './FooterLinks';
 
 export default function Footer() {
     const popularCategories = [
-        {label: 'Harry Potter', href: '#'},
-        {label: 'Avengers', href: '#'},
-        {label: 'City', href: '#'},
-        {label: 'Technics', href: '#'},
-        {label: 'Star Wars', href: '#'},
-        {label: 'Mario', href: '#'},
+        {label: 'Onderdelen', href: '/onderdelen'},
+        {label: 'Minifiguren', href: '/minifiguren'},
+        {label: 'Sets', href: '/sets'},
     ];
-
     const customerService = [
-        {label: 'Mijn account', href: '#'},
-        {label: 'Veelgestelde vragen', href: '#'},
-        {label: 'Over ons', href: '#'},
-        {label: 'Contact', href: '#'},
+        {label: 'Mijn account', href: '/account/orders'},
+        {label: 'Nieuws', href: '/blog'},
+        {label: 'Over ons', href: '/pages/over-ons'},
+        {label: 'Contact', href: '/pages/contact'},
+        {label: 'Verzending', href: '/pages/verzending'},
+        {label: 'Retourneren', href: '/pages/retourneren'},
     ];
 
     return (
@@ -27,16 +25,11 @@ export default function Footer() {
                 <img src="/images/coco-logo-small.svg" alt="Collect2Connect" className="w-full max-w-60 hidden md:block" />
                 <img src="/images/coco-logo.svg" alt="Collect2Connect" className="w-full max-w-60 md:hidden" />
 
-                <FooterLinks title="Popular categories" links={popularCategories} />
-                <FooterLinks title="Customer service" links={customerService} />
+                <FooterLinks title="Ontdek de collectie" links={popularCategories} />
+                <FooterLinks title="Klantenservice" links={customerService} />
             </div>
 
-            <div className="flex items-center gap-2 mt-8">
-                <img className="h-8" src="/images/payment-methods/ideal-wero.svg" alt="iDEAL / Wero" />
-                <img className="h-8" src="/images/payment-methods/paypal.svg" alt="PayPal" />
-                <img className="h-8" src="/images/payment-methods/visa.svg" alt="Visa" />
-                <img className="h-8" src="/images/payment-methods/mastercard.svg" alt="Mastercard" />
-            </div>
+            <p className="mt-8 text-sm">Testomgeving — betalingen worden gesimuleerd.</p>
 
             <hr className="border-gray-300 my-8" />
 

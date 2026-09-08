@@ -15,6 +15,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class MinifigSearchResource extends JsonResource
 {
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         $this->loadMissing(['media', 'products']);
@@ -29,7 +30,7 @@ class MinifigSearchResource extends JsonResource
 
         return [
             // Always prefer the sellable product id so cards open a product page.
-            'id' => $product?->id ?? $this->id,
+            'id' => $product->id ?? $this->id,
             'title' => $this->name,
             'lego_number' => $this->bricklink_id,
             'rebrickable_id' => $this->rebrickable_id,

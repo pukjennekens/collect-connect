@@ -73,7 +73,7 @@ class HomeController extends Controller
             fn (Builder $product) => $product->where('stock', '>', 0),
         );
 
-        return PartCategory::query()
+        return array_values(PartCategory::query()
             ->withCount(['parts' => $inStockParts])
             ->whereHas('parts', $inStockParts)
             ->orderByDesc('parts_count')
@@ -86,6 +86,6 @@ class HomeController extends Controller
                 'url' => route('catalog.parts', ['category_id' => $category->id], absolute: false),
             ])
             ->values()
-            ->all();
+            ->all());
     }
 }

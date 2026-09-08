@@ -10,6 +10,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 
 class DispatchStockNotificationsJob implements ShouldQueue
@@ -20,6 +21,16 @@ class DispatchStockNotificationsJob implements ShouldQueue
      * @param  list<int>  $productIds
      */
     public function __construct(public array $productIds) {}
+
+    public int $tries = 5;
+
+    public int $timeout = 60;
+
+    /** @return list<int> */
+    public function backoff(): array
+    {
+        return [30, 120, 300, 900];
+    }
 
     public function handle(): void
     {
@@ -32,12 +43,14 @@ class DispatchStockNotificationsJob implements ShouldQueue
             ->whereNull('notified_at')
             ->with('product.productable')
             ->each(function (StockNotification $notification): void {
-                if (! $notification->product || $notification->product->stock <= 0) {
-                    return;
-                }
-
-                Mail::to($notification->email)->send(new StockBackInStockMail($notification->product));
-                $notification->update(['notified_at' => now()]);
+                Cache::lock('stock-notification:'.$notification->id, 120)->block(5, function () use ($notification): void {
+                    $notification->refresh()->load('product.productable');
+                    if ($notification->notified_at || ! $notification->product || ! $notification->product->isPurchasable()) {
+                        return;
+                    }
+                    Mail::to($notification->email)->send(new StockBackInStockMail($notification->product));
+                    $notification->update(['notified_at' => now()]);
+                });
             });
     }
 }

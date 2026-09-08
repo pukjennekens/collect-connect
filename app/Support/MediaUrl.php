@@ -49,7 +49,7 @@ final class MediaUrl
             ? $media->getUrl()
             : $media->getAvailableUrl($conversions);
 
-        return self::toRelative(is_string($url) ? $url : null);
+        return self::toRelative($url);
     }
 
     /**

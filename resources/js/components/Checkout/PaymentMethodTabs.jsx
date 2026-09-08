@@ -30,7 +30,7 @@ export default function PaymentMethodTabs({ methods, selectedId, onSelect, error
             </div>
 
             <p className="text-sm text-gray-500">
-                Je rondt de betaling veilig af bij de betaalprovider nadat je de bestelling bevestigt.
+                Na bevestiging kies je de uitkomst van je testbetaling. Er wordt geen geld afgeschreven.
             </p>
 
             {error && <p className="text-sm text-red-600">{error}</p>}

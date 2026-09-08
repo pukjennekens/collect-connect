@@ -18,6 +18,7 @@ import { useCallback, useState } from 'react';
 export function useCart() {
     const { cart } = usePage().props;
     const [processing, setProcessing] = useState(null);
+    const [error, setError] = useState('');
 
     const items = cart?.items ?? [];
     const total = cart?.total ?? 0;
@@ -29,12 +30,14 @@ export function useCart() {
 
     const addItem = useCallback((productId, quantity, { onSuccess } = {}) => {
         setProcessing(productId);
+        setError('');
         router.post(
             '/cart/items',
             { product_id: productId, quantity },
             {
                 preserveScroll: true,
                 onSuccess: () => onSuccess?.(),
+                onError: errors => setError(Object.values(errors).join(' ')),
                 onFinish: () => setProcessing(null),
             },
         );
@@ -42,23 +45,27 @@ export function useCart() {
 
     const removeItem = useCallback((productId) => {
         setProcessing(productId);
+        setError('');
         router.delete(`/cart/items/${productId}`, {
             preserveScroll: true,
+            onError: errors => setError(Object.values(errors).join(' ')),
             onFinish: () => setProcessing(null),
         });
     }, []);
 
     const updateQuantity = useCallback((productId, quantity) => {
         setProcessing(productId);
+        setError('');
         router.patch(
             `/cart/items/${productId}`,
             { quantity },
             {
                 preserveScroll: true,
+                onError: errors => setError(Object.values(errors).join(' ')),
                 onFinish: () => setProcessing(null),
             },
         );
     }, []);
 
-    return { items, total, count, processing, addItem, removeItem, updateQuantity, open };
+    return { items, total, count, processing, error, addItem, removeItem, updateQuantity, open };
 }

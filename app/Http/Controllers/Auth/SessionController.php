@@ -31,7 +31,7 @@ class SessionController extends Controller
         }
 
         $request->session()->regenerate();
-        $cartService->mergeGuestCartIntoUser(Auth::id());
+        $cartService->mergeGuestCartIntoUser(Auth::id() ?? abort(401));
 
         return redirect()->intended(route('account.orders.index'));
     }
