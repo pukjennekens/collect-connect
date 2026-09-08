@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 
 class ProductSearchResource extends ProductResource
 {
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         $this->loadMissing(ProductListingQuery::defaultWith());
@@ -26,20 +27,20 @@ class ProductSearchResource extends ProductResource
 
         return [
             'id' => $this->id,
-            'title' => $this->productable->name,
-            'lego_number' => $this->productable->bricklink_id,
+            'title' => $this->getTitle(),
+            'lego_number' => $this->productable?->bricklink_id,
             'url' => route('product.show', $this->resource, absolute: false),
             'image' => $this->getImage(),
             'priceMin' => $priceMin,
             'priceMax' => $priceMax,
             'sibling_colors' => $siblings
-                ->sortBy(fn (Product $product): string => $product->color?->name ?? '')
+                ->sortBy(fn (Product $product): string => $product->color->name ?? '')
                 ->values()
                 ->map(fn (Product $product): array => [
                     'id' => $product->id,
                     'stock' => $product->stock,
                     'price' => $product->price,
-                    'image' => $this->getPartImage($product->productable, $product->color_id),
+                    'image' => $product->productable instanceof Part ? $this->getPartImage($product->productable, $product->color_id) : null,
                     'color' => ColorResource::make($product->color)->resolve(),
                 ])
                 ->all(),

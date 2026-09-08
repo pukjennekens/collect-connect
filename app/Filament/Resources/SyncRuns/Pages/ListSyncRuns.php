@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Resources\SyncRuns\Pages;
 
 use App\Filament\Resources\SyncRuns\SyncRunResource;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListSyncRuns extends ListRecords
@@ -15,7 +14,7 @@ class ListSyncRuns extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+
         ];
     }
 }

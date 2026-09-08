@@ -1,4 +1,5 @@
 import { ShoppingCartIcon } from '@phosphor-icons/react/dist/csr/ShoppingCart';
+import Price from '../Shop/Price.jsx';
 import Button from '../UI/Button.jsx';
 import { useCart } from '../../hooks/useCart.js';
 
@@ -10,7 +11,7 @@ export default function CartIcon({ onOpen }) {
     const { count, total } = useCart();
 
     return (
-        <Button onClick={onOpen}>
+        <Button onClick={onOpen} aria-label={`Winkelwagen, ${count} artikelen`}>
             <div className="relative">
                 <ShoppingCartIcon size={24} />
 
@@ -21,7 +22,7 @@ export default function CartIcon({ onOpen }) {
                 )}
             </div>
 
-            <span className="hidden sm:inline font-semibold text-sm uppercase">&euro; {total.toFixed(2)}</span>
+            <span className="hidden sm:inline font-semibold text-sm uppercase"><Price price={Math.round(total * 100)} /></span>
         </Button>
     );
 }

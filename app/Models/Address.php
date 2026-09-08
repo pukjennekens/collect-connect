@@ -19,6 +19,8 @@ class Address extends Model
         'phone',
         'line1',
         'line2',
+        'house_number',
+        'house_addition',
         'postal_code',
         'city',
         'country_code',

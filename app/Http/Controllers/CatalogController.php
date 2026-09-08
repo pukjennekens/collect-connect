@@ -35,7 +35,7 @@ class CatalogController extends Controller
 
         $query = Product::query()
             ->with(ProductListingQuery::defaultWith())
-            ->where('stock', '>', 0)
+            ->purchasable()
             ->when($colorId, fn (Builder $builder) => $builder->where('color_id', $colorId))
             ->when($categoryId, function (Builder $builder) use ($categoryId): void {
                 $builder->whereHasMorph(
@@ -70,7 +70,7 @@ class CatalogController extends Controller
                 'colors' => Color::query()
                     ->where('bricklink_color_id', '!=', '0')
                     ->orderBy('name')
-                    ->limit(80)
+
                     ->get(['id', 'name', 'hex']),
             ],
             'active' => [
@@ -90,7 +90,7 @@ class CatalogController extends Controller
         $query = Product::query()
             ->with(ProductListingQuery::forType($type))
             ->where('productable_type', (new $morph)->getMorphClass())
-            ->where('stock', '>', 0)
+            ->purchasable()
             ->when($colorId, fn (Builder $builder) => $builder->where('color_id', $colorId))
             ->when($categoryId && $type === 'part', function (Builder $builder) use ($categoryId): void {
                 $builder->whereHasMorph('productable', [Part::class], fn (Builder $part) => $part->where('part_category_id', $categoryId));
@@ -98,7 +98,7 @@ class CatalogController extends Controller
             ->orderByDesc('stock');
 
         return $this->respondWithListing($query, [
-            'title' => $type === 'minifig' ? 'Minifiguren' : 'Onderdelen',
+            'title' => $type === 'minifig' ? 'Minifiguren' : ($categoryId ? (PartCategory::query()->whereKey($categoryId)->value('name') ?? 'Onderdelen') : 'Onderdelen'),
             'type' => $type,
             'query' => null,
             'filters' => [
@@ -108,9 +108,9 @@ class CatalogController extends Controller
                 'colors' => $type === 'part'
                     ? Color::query()
                         ->where('bricklink_color_id', '!=', '0')
-                        ->whereHas('products', fn (Builder $p) => $p->where('stock', '>', 0)->where('productable_type', (new Part)->getMorphClass()))
+                        ->whereIn('id', Product::query()->select('color_id')->purchasable()->where('productable_type', (new Part)->getMorphClass()))
                         ->orderBy('name')
-                        ->limit(80)
+
                         ->get(['id', 'name', 'hex'])
                     : [],
             ],
@@ -127,7 +127,7 @@ class CatalogController extends Controller
      * the search listing and the type-scoped listings.
      *
      * @param  Builder<Product>  $query
-     * @param  array{title: string, type: string, query: ?string, filters: array, active: array}  $payload
+     * @param  array{title: string, type: string, query: ?string, filters: array<string, mixed>, active: array<string, mixed>}  $payload
      */
     protected function respondWithListing(Builder $query, array $payload): Response
     {

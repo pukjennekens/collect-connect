@@ -23,7 +23,7 @@ class GetDefinitionRequest extends Request
     public function createDtoFromResponse(Response $response): Definition
     {
         /** @var array<string, mixed> $payload */
-        $payload = $response->json() ?? [];
+        $payload = $response->json();
 
         // Single-definition responses omit `id` (it is only in the URL) and use
         // `remainingQuantity` instead of the list endpoint's `totalRemainingQuantity`.

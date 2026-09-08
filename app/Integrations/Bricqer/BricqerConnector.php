@@ -17,6 +17,11 @@ class BricqerConnector extends Connector
         protected string $apiKey,
     ) {}
 
+    protected function defaultConfig(): array
+    {
+        return ['connect_timeout' => 10, 'timeout' => 60];
+    }
+
     public function resolveBaseUrl(): string
     {
         if (! preg_match('/^[a-z0-9]+\.bricqer\.com$/', $this->domain)) {

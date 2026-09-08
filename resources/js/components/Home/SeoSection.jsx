@@ -7,15 +7,15 @@ const DEFAULT_BLOCKS = [
     },
     {
         title: 'Minifiguren en accessoires',
-        body: 'Van ridders tot ruimtevaarders: onze minifiguren zijn stuk voor stuk gecontroleerd op compleetheid. Ook losse hoofddeksels, wapens en andere accessoires vind je hier terug.',
+        body: 'Vind personages voor jouw collectie. Bekijk per minifiguur de beschikbare informatie, prijs en voorraad.',
     },
     {
-        title: 'Snel en zorgvuldig verzonden',
-        body: 'Bestel je voor 16:00 uur, dan gaat je pakket dezelfde dag nog op de post. Elk onderdeel wordt met de hand gesorteerd en veilig verpakt, zodat je bestelling compleet aankomt.',
+        title: 'Verzending van jouw bestelling',
+        body: 'De beschikbare verzendmethoden en kosten verschijnen bij het afrekenen, op basis van je adres en bestelling.',
     },
     {
-        title: 'Nieuw en gebruikt naast elkaar',
-        body: 'Je kiest zelf tussen nieuwe steentjes en zorgvuldig geselecteerde gebruikte onderdelen. Zo bouw je jouw set af tegen de prijs die bij jou past.',
+        title: 'Bouw jouw set weer compleet',
+        body: 'Zoek jouw LEGO set en ontdek welke bijbehorende onderdelen en minifiguren beschikbaar zijn.',
     },
 ];
 

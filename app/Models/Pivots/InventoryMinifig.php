@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pivots;
 
 use App\Models\Inventory;
-use App\Models\Part;
+use App\Models\Minifig;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 
@@ -30,10 +30,10 @@ class InventoryMinifig extends Pivot
     }
 
     /**
-     * @return BelongsTo<Part, $this>
+     * @return BelongsTo<Minifig, $this>
      */
     public function minifig(): BelongsTo
     {
-        return $this->belongsTo(Part::class);
+        return $this->belongsTo(Minifig::class);
     }
 }

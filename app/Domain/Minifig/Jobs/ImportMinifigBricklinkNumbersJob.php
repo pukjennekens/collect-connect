@@ -175,7 +175,7 @@ class ImportMinifigBricklinkNumbersJob implements ShouldQueue
         try {
             $header = fgetcsv($handle, escape: '\\');
 
-            if ($header === false || $header === [null] || $header === []) {
+            if ($header === false || $header === [null]) {
                 throw new RuntimeException("Minifig BrickLink CSV at [{$path}] has no header row.");
             }
 
@@ -193,7 +193,7 @@ class ImportMinifigBricklinkNumbersJob implements ShouldQueue
             }
 
             while (($row = fgetcsv($handle, escape: '\\')) !== false) {
-                if ($row === [null] || $row === []) {
+                if ($row === [null]) {
                     continue;
                 }
 

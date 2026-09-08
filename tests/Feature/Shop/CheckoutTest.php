@@ -16,9 +16,21 @@ class CheckoutTest extends TestCase
 {
     use RefreshDatabase;
 
+    private int $shippingMethodId;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->shippingMethodId = \App\Models\ShippingMethod::query()->create([
+            'bricqer_id' => 1, 'name' => 'PostNL Brievenbus (NL)', 'is_active' => true,
+            'country_regions' => ['NL' => 'NL'], 'country_ids' => ['NL' => 1],
+            'rate_bands' => [['shipping_code' => 'NL', 'weight_min' => 0, 'weight_max' => 100000, 'price' => '3.95']],
+        ])->id;
+    }
+
     public function test_guest_can_place_order_from_cart(): void
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
         $color = Color::factory()->create();
         $product = Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
@@ -39,7 +51,7 @@ class CheckoutTest extends TestCase
             'postal_code' => '1234AB',
             'city' => 'Amsterdam',
             'country_code' => 'NL',
-            'shipping_method_id' => 0,
+            'shipping_method_id' => $this->shippingMethodId,
             'payment_method' => 'ideal',
             'create_account' => false,
         ]);
@@ -48,7 +60,7 @@ class CheckoutTest extends TestCase
         $this->assertNotNull($order);
         $response->assertRedirect(route('checkout.confirmation', $order));
 
-        $this->assertSame(2, $order->items()->sum('quantity'));
+        $this->assertSame(2, (int) $order->items()->sum('quantity'));
         $this->assertSame(8, $product->refresh()->stock);
         $this->assertSame('pending_payment', $order->status);
         $this->assertSame(395, $order->shipping_cents);
@@ -57,7 +69,7 @@ class CheckoutTest extends TestCase
 
     public function test_client_cannot_underpay_shipping(): void
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
         $product = Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
             'productable_id' => $part->id,
@@ -75,7 +87,7 @@ class CheckoutTest extends TestCase
             'postal_code' => '1234AB',
             'city' => 'Amsterdam',
             'country_code' => 'NL',
-            'shipping_method_id' => 0,
+            'shipping_method_id' => $this->shippingMethodId,
             // Attempt to force free shipping via client payload (ignored).
             'shipping_cents' => 0,
             'shipping_method_name' => 'Free hack',
@@ -114,7 +126,7 @@ class CheckoutTest extends TestCase
 
     public function test_guest_can_view_confirmation_for_order_placed_in_session(): void
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
         $product = Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
             'productable_id' => $part->id,
@@ -132,7 +144,7 @@ class CheckoutTest extends TestCase
             'postal_code' => '1234AB',
             'city' => 'Amsterdam',
             'country_code' => 'NL',
-            'shipping_method_id' => 0,
+            'shipping_method_id' => $this->shippingMethodId,
             'payment_method' => 'bank',
             'create_account' => false,
         ])->assertRedirect();
@@ -145,7 +157,7 @@ class CheckoutTest extends TestCase
 
     public function test_order_uses_locked_database_prices_not_client_payload(): void
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
         $product = Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
             'productable_id' => $part->id,
@@ -163,7 +175,7 @@ class CheckoutTest extends TestCase
             'postal_code' => '1234AB',
             'city' => 'Amsterdam',
             'country_code' => 'NL',
-            'shipping_method_id' => 0,
+            'shipping_method_id' => $this->shippingMethodId,
             'payment_method' => 'bank',
             'create_account' => false,
             // Spoofed line items must never affect totals.
@@ -184,7 +196,7 @@ class CheckoutTest extends TestCase
 
     public function test_checkout_can_create_account_and_attach_order(): void
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
         $product = Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
             'productable_id' => $part->id,
@@ -202,9 +214,10 @@ class CheckoutTest extends TestCase
             'postal_code' => '1234AB',
             'city' => 'Amsterdam',
             'country_code' => 'NL',
-            'shipping_method_id' => 0,
+            'shipping_method_id' => $this->shippingMethodId,
             'payment_method' => 'ideal',
             'create_account' => true,
+            'save_address' => true,
             'password' => 'Password1!',
             'password_confirmation' => 'Password1!',
         ])->assertRedirect();
@@ -218,7 +231,7 @@ class CheckoutTest extends TestCase
 
     public function test_checkout_persists_the_optional_company_field(): void
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
         $product = Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
             'productable_id' => $part->id,
@@ -237,9 +250,10 @@ class CheckoutTest extends TestCase
             'postal_code' => '1234AB',
             'city' => 'Amsterdam',
             'country_code' => 'NL',
-            'shipping_method_id' => 0,
+            'shipping_method_id' => $this->shippingMethodId,
             'payment_method' => 'ideal',
             'create_account' => true,
+            'save_address' => true,
             'password' => 'Password1!',
             'password_confirmation' => 'Password1!',
         ])->assertRedirect();
@@ -251,7 +265,7 @@ class CheckoutTest extends TestCase
 
     public function test_checkout_company_field_stays_optional(): void
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
         $product = Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
             'productable_id' => $part->id,
@@ -269,7 +283,7 @@ class CheckoutTest extends TestCase
             'postal_code' => '1234AB',
             'city' => 'Amsterdam',
             'country_code' => 'NL',
-            'shipping_method_id' => 0,
+            'shipping_method_id' => $this->shippingMethodId,
             'payment_method' => 'ideal',
             'create_account' => false,
         ])->assertRedirect();
@@ -279,7 +293,7 @@ class CheckoutTest extends TestCase
 
     public function test_checkout_rejects_invalid_payment_method_for_country(): void
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
         $product = Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
             'productable_id' => $part->id,
@@ -298,7 +312,7 @@ class CheckoutTest extends TestCase
                 'postal_code' => '1234AB',
                 'city' => 'Amsterdam',
                 'country_code' => 'NL',
-                'shipping_method_id' => 0,
+                'shipping_method_id' => $this->shippingMethodId,
                 'payment_method' => 'bancontact',
                 'create_account' => false,
             ])

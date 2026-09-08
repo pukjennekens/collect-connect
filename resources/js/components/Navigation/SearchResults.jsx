@@ -1,5 +1,6 @@
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { SpinnerGapIcon } from "@phosphor-icons/react/dist/csr/SpinnerGap";
+import { Link } from "@inertiajs/react";
 import { useEffect, useState } from "react";
 import { searchAll } from "../../services/search.js";
 import InlineProduct from "../Shop/Products/InlineProduct.jsx";
@@ -12,6 +13,8 @@ import InlineSet from "../Shop/Sets/InlineSet.jsx";
 export default function SearchResults({ query }) {
     const [results, setResults] = useState({ products: [], minifigs: [], sets: [] });
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(false);
+    const [retry, setRetry] = useState(0);
     const [activeTab, setActiveTab] = useState('products');
 
     const trimmedQuery = query.trim();
@@ -25,6 +28,7 @@ export default function SearchResults({ query }) {
 
         const controller = new AbortController();
         setIsLoading(true);
+        setError(false);
 
         const timer = setTimeout(async () => {
             try {
@@ -43,6 +47,7 @@ export default function SearchResults({ query }) {
                 }
             } catch (error) {
                 if (error.name !== "AbortError") {
+                    setError(true);
                     setResults({ products: [], minifigs: [], sets: [] });
                     setIsLoading(false);
                 }
@@ -53,7 +58,7 @@ export default function SearchResults({ query }) {
             clearTimeout(timer);
             controller.abort();
         };
-    }, [trimmedQuery]);
+    }, [trimmedQuery, retry]);
 
     if (trimmedQuery === "") {
         return (
@@ -90,6 +95,8 @@ export default function SearchResults({ query }) {
         <div className="flex items-center justify-center py-12 text-gray-400">
             <SpinnerGapIcon size={32} className="animate-spin" />
         </div>
+    ) : error ? (
+        <div role="alert" className="space-y-3 p-6 text-center"><p>Zoeken is tijdelijk niet beschikbaar.</p><button onClick={() => setRetry(value => value + 1)} className="rounded border px-4 py-3">Opnieuw proberen</button></div>
     ) : !hasAny ? (
         <p className="py-12 text-center text-gray-500">
             Geen resultaten gevonden voor <span className="font-semibold text-gray-900">"{query}"</span>.
@@ -104,6 +111,7 @@ export default function SearchResults({ query }) {
                 </p>
             </div>
 
+            <Link href={`/zoeken?q=${encodeURIComponent(trimmedQuery)}`} className="mx-4 my-2 inline-flex min-h-11 items-center text-primary underline">Bekijk alle resultaten</Link>
             {/* ── Mobile layout ─────────────────────────────────────────── */}
             <div className="flex flex-1 min-h-0 flex-col lg:hidden">
                 {loadingOrEmpty ? (

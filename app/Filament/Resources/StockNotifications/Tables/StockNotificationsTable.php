@@ -4,29 +4,13 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\StockNotifications\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
 class StockNotificationsTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
-            ->columns([
-                //
-            ])
-            ->filters([
-                //
-            ])
-            ->recordActions([
-                EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
-            ]);
+        return $table->defaultSort('id', 'desc')->columns([TextColumn::make('product_id')->searchable()->sortable()->wrap(), TextColumn::make('email')->searchable()->sortable()->wrap(), TextColumn::make('notified_at')->searchable()->sortable()->wrap(), TextColumn::make('created_at')->searchable()->sortable()->wrap()]);
     }
 }

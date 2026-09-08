@@ -20,10 +20,10 @@ export default function PromoBanner({ title, href, image, size = 'short', cta = 
                 src={image}
                 alt=""
                 aria-hidden="true"
-                className={`pointer-events-none absolute inset-y-0 right-0 h-full w-[52%] object-cover ${
+                className={`pointer-events-none absolute inset-y-0 right-0 h-full ${
                     isTall
-                        ? '[clip-path:ellipse(78%_130%_at_100%_50%)]'
-                        : '[clip-path:ellipse(88%_145%_at_100%_50%)]'
+                        ? 'w-[52%] object-cover [clip-path:ellipse(78%_130%_at_100%_50%)]'
+                        : 'w-[40%] object-contain p-4'
                 }`}
             />
 
@@ -32,7 +32,7 @@ export default function PromoBanner({ title, href, image, size = 'short', cta = 
                     isTall ? 'min-h-56 sm:min-h-72 lg:min-h-[26rem]' : 'min-h-40 sm:min-h-44'
                 }`}
             >
-                <h2 className="max-w-[46%] text-lg font-bold break-words uppercase text-gray-900 sm:text-2xl lg:text-3xl">
+                <h2 className={`font-bold uppercase text-gray-900 ${isTall ? "max-w-[46%] text-lg sm:text-2xl lg:text-3xl" : "max-w-[60%] text-lg sm:text-2xl"}`}>
                     {title}
                 </h2>
 

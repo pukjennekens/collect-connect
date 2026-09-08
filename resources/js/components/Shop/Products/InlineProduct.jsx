@@ -23,7 +23,7 @@ export default function InlineProduct({ product }) {
 
     const priceLabel =
         priceMin !== priceMax
-            ? <div><Price price={priceMin} /> - <Price price={priceMax} /></div>
+            ? <span><Price price={priceMin} /> – <Price price={priceMax} /></span>
             : <Price price={priceMin} />;
 
     const tooltipId = `inline-product-colors-${product.id}`;
@@ -45,10 +45,12 @@ export default function InlineProduct({ product }) {
 
             <div className="min-w-0">
                 <p className="text-xs text-gray-400">{product.lego_number}</p>
-                <h3 className="truncate text-sm font-medium text-gray-900 group-hover:underline">
+                <h3 className="line-clamp-2 min-h-10 text-sm font-medium text-gray-900 group-hover:underline">
                     {product.title}
                 </h3>
                 <p className="text-sm font-semibold text-gray-900">{priceLabel}</p>
+                {product.color?.name && <p className="text-xs text-gray-600">{product.color.name}</p>}
+                <p className="text-xs text-gray-600">{product.stock > 0 ? `${product.stock} op voorraad` : "Bekijk beschikbare varianten"}</p>
             </div>
 
             {siblingColors.length > 0 && (

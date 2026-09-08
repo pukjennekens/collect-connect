@@ -1,4 +1,5 @@
-import { useForm } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import ContactSection from '../../components/Checkout/ContactSection';
 import OrderSummaryCard from '../../components/Checkout/OrderSummaryCard';
 import PaymentMethodTabs from '../../components/Checkout/PaymentMethodTabs';
@@ -27,11 +28,20 @@ export default function CheckoutPage({
     defaultAddress = null,
     user = null,
     country = 'NL',
+    checkoutToken = '',
+    countries = [],
+    addresses = [],
+    shippingError = null,
 }) {
+    const [loadingRates, setLoadingRates] = useState(false);
     const firstMethod = shippingMethods[0];
     const { first_name, last_name } = splitName(defaultAddress?.name ?? user?.name);
 
     const form = useForm({
+        checkout_token: checkoutToken,
+        save_address: false,
+        house_number: defaultAddress?.house_number ?? '',
+        house_addition: defaultAddress?.house_addition ?? '',
         first_name,
         last_name,
         email: defaultAddress?.email ?? user?.email ?? '',
@@ -45,9 +55,27 @@ export default function CheckoutPage({
         shipping_method_id: firstMethod?.id ?? 0,
         shipping_cents: firstMethod?.price_cents ?? 0,
         payment_method: paymentMethods[0]?.id ?? '',
-        create_account: !user,
+        create_account: false,
         password: '',
+        password_confirmation: '',
     });
+
+    useEffect(() => {
+        form.setData(data => {
+            const selected = shippingMethods.find(method => String(method.id) === String(data.shipping_method_id)) ?? shippingMethods[0];
+            const payment = paymentMethods.find(method => method.id === data.payment_method) ?? paymentMethods[0];
+            return {...data, checkout_token: checkoutToken, shipping_method_id: selected?.id ?? 0, shipping_cents: selected?.price_cents ?? 0, payment_method: payment?.id ?? ''};
+        });
+    }, [shippingMethods, paymentMethods, checkoutToken]);
+
+    const reloadRates = (code) => {
+        setLoadingRates(true);
+        router.get('/checkout', {country: code}, {
+            preserveState: true,
+            preserveScroll: true,
+            onFinish: () => setLoadingRates(false),
+        });
+    };
 
     const selectShipping = (method) => {
         form.setData((data) => ({
@@ -59,6 +87,7 @@ export default function CheckoutPage({
 
     const submit = (e) => {
         e.preventDefault();
+        if (loadingRates || shippingMethods.length === 0 || paymentMethods.length === 0 || shippingError) return;
 
         form.transform((data) => ({
             ...data,
@@ -72,12 +101,17 @@ export default function CheckoutPage({
 
     return (
         <Container className="my-8 max-w-6xl">
+            <Head title="Afrekenen" />
+            <Link href="/cart" className="mb-4 inline-block underline">Terug naar winkelwagen</Link>
             <h1 className="border-b border-gray-200 pb-6 text-4xl font-bold">Afrekenen</h1>
 
+            <p className="mt-4 rounded-lg bg-amber-50 p-4 text-sm">Testomgeving: betalingen worden gesimuleerd. Er wordt geen geld afgeschreven.</p>
             <form onSubmit={submit} className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-5">
                 <div className="space-y-8 lg:col-span-3">
                     <ContactSection form={form} user={user} />
-                    <ShippingAddressSection form={form} />
+                    <ShippingAddressSection form={form} countries={countries} addresses={addresses} canSave={Boolean(user) || form.data.create_account} reloadRates={reloadRates} />
+                    {shippingError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{shippingError}</p>}
+                    {loadingRates && <p role="status">Verzendmethoden worden bijgewerkt…</p>}
                     <ShippingMethodCards
                         methods={shippingMethods}
                         selectedId={form.data.shipping_method_id}
@@ -93,13 +127,16 @@ export default function CheckoutPage({
                 </div>
 
                 <div className="lg:col-span-2">
+
                     <OrderSummaryCard
                         items={items}
                         subtotal={subtotal}
-                        shippingCents={form.data.shipping_cents}
-                        processing={form.processing}
+                        shippingCents={shippingError || loadingRates || shippingMethods.length === 0 ? null : form.data.shipping_cents}
+                        processing={form.processing || loadingRates}
+                        canSubmit={shippingMethods.length > 0 && paymentMethods.length > 0 && !shippingError && !loadingRates}
                         error={firstError}
                     />
+
                 </div>
             </form>
         </Container>

@@ -1,7 +1,7 @@
 import { MinusIcon } from '@phosphor-icons/react/dist/csr/Minus';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { ShoppingCartIcon } from '@phosphor-icons/react/dist/csr/ShoppingCart';
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import Button from '../../components/UI/Button';
 import Container from '../../components/Container';
@@ -14,7 +14,7 @@ import InlineProduct from "../../components/Shop/Products/InlineProduct.jsx";
 /**
  * @param {Object} props
  */
-export default function ProductPage({ product: { data: product }, suggestions: { data: suggestions }, status }) {
+export default function ProductPage({ product: { data: product }, suggestions: { data: suggestions }, status, related_sets }) {
     const { items, addItem, open, processing } = useCart();
 
     const currentCartQty = items.find((i) => i.id === product.id)?.quantity ?? 0;
@@ -183,13 +183,26 @@ export default function ProductPage({ product: { data: product }, suggestions: {
                 <div className="mt-8">
                     <h2 className="text-2xl font-semibold mb-4">Misschien ook interessant:</h2>
 
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {suggestions.map(suggestedProduct => (
                             <InlineProduct key={suggestedProduct.id} product={suggestedProduct} />
                         ))}
                     </div>
                 </div>
             )}
+            {related_sets?.data?.length > 0 && <section className="mt-10">
+                <h2 className="text-xl font-semibold">Komt voor in deze sets</h2>
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    {related_sets.data.map((set) => <Link key={set.id} href={set.url} className="rounded-lg border border-gray-200 p-3">
+                        {set.image && <img src={set.image} alt={set.name} className="h-32 w-full object-contain" />}
+                        <p>{set.set_num} · {set.name}</p>
+                    </Link>)}
+                </div>
+                <nav className="mt-4 flex gap-4" aria-label="Sets pagina's">
+                    {related_sets.links?.prev && <Link href={related_sets.links.prev}>Vorige</Link>}
+                    {related_sets.links?.next && <Link href={related_sets.links.next}>Volgende</Link>}
+                </nav>
+            </section>}
         </Container>
     );
 }

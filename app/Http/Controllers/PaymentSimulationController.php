@@ -8,7 +8,6 @@ use App\Domain\Order\Actions\MarkOrderPaidAction;
 use App\Domain\Payment\PaymentGatewayManager;
 use App\Models\Order;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Inertia\Response;
 
 /**
@@ -30,20 +29,37 @@ class PaymentSimulationController extends Controller
                 'number' => $order->number,
                 'total_cents' => $order->total_cents,
                 'status' => $order->status,
+                'payment_status' => $order->payment_status,
+                'can_pay' => $order->canPay(),
+                'expires_at' => $order->paymentExpiresAt()?->toIso8601String(),
+                'confirmation_url' => route('checkout.confirmation', $order),
                 'payment_method' => $order->payment_method,
             ],
         ]);
     }
 
-    public function store(Request $request, Order $order, MarkOrderPaidAction $markPaid): RedirectResponse
+    public function store(\App\Http\Requests\Checkout\SimulatePaymentRequest $request, Order $order, MarkOrderPaidAction $markPaid): RedirectResponse
     {
         $this->guard($order);
 
+        if ($request->validated('outcome') === 'cancelled') {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($order): void {
+                $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+                if ($locked->status === 'pending_payment') {
+                    app(\App\Domain\Product\Services\StockService::class)->release($locked);
+                    $locked->forceFill(['status' => 'cancelled', 'payment_status' => 'cancelled', 'stock_reserved_at' => null])->save();
+                }
+            });
+
+            return redirect()->route('checkout.confirmation', $order);
+        }
         $request->merge(['reference' => $order->payment_reference]);
         // Always the testing driver: this page exists only to stand in for one.
         $result = $this->gateways->driver('testing')->handleCallback($request);
 
         if (! $result->isPaid()) {
+            Order::query()->whereKey($order->id)->where('status', 'pending_payment')->update(['payment_status' => 'failed']);
+
             return back()->with('status', 'Betaling gesimuleerd als mislukt. De bestelling blijft open staan.');
         }
 

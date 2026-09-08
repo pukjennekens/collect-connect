@@ -15,6 +15,7 @@ class StockNotification extends Model
     protected $fillable = [
         'product_id',
         'email',
+        'notified_at',
     ];
 
     /**

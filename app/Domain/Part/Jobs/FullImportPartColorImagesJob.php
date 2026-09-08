@@ -93,8 +93,9 @@ class FullImportPartColorImagesJob implements ShouldBeUnique, ShouldQueue
         /** @var Collection<string, Definition> $byBricklinkId */
         $byBricklinkId = $definitions
             ->filter(fn (Definition $definition): bool => $definition->legoType === 'M' && filled($definition->picture))
+            ->collect()
             ->groupBy(fn (Definition $definition): string => strtolower($definition->legoId))
-            ->map(fn (Collection $group): Definition => $group->sortByDesc('id')->first());
+            ->map(fn (Collection $group): Definition => $group->sortByDesc('id')->firstOrFail());
 
         if ($byBricklinkId->isEmpty()) {
             return 0;

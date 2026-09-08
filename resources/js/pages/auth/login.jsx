@@ -1,28 +1,22 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import Container from '../../components/Container';
 import Button from '../../components/UI/Button';
+import Input from '../../components/UI/Input';
 
 export default function Login() {
     const form = useForm({ email: '', password: '', remember: false });
-
-    return (
-        <Container className="max-w-md my-12">
-            <h1 className="text-2xl font-bold mb-6">Inloggen</h1>
-            <form
-                className="space-y-3"
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    form.post('/login');
-                }}
-            >
-                <input className="w-full border rounded-md px-3 py-2" type="email" placeholder="E-mail" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} required />
-                <input className="w-full border rounded-md px-3 py-2" type="password" placeholder="Wachtwoord" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} required />
-                <Button type="submit" variant="primary" className="w-full justify-center" disabled={form.processing}>Inloggen</Button>
-                {form.errors.email && <p className="text-sm text-red-600">{form.errors.email}</p>}
-            </form>
-            <p className="mt-4 text-sm text-gray-600">
-                Nog geen account? <Link href="/register" className="underline">Registreren</Link>
-            </p>
-        </Container>
-    );
+    const { flash } = usePage().props;
+    return <Container className="max-w-md my-12 space-y-6">
+        <Head title="Inloggen" />
+        <h1 className="text-2xl font-bold">Inloggen</h1>
+        {flash?.status && <p role="status">{flash.status}</p>}
+        <form className="space-y-4" onSubmit={e => { e.preventDefault(); form.post('/login', { onFinish: () => form.reset('password') }); }}>
+            <Input label="E-mail" name="email" type="email" autoComplete="email" value={form.data.email} onChange={e => form.setData('email', e.target.value)} error={form.errors.email} required />
+            <Input label="Wachtwoord" name="password" type="password" autoComplete="current-password" value={form.data.password} onChange={e => form.setData('password', e.target.value)} error={form.errors.password} required />
+            <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={form.data.remember} onChange={e => form.setData('remember', e.target.checked)} />Ingelogd blijven</label>
+            <Button type="submit" variant="primary" className="min-h-11 w-full" disabled={form.processing}>{form.processing ? 'Inloggen…' : 'Inloggen'}</Button>
+        </form>
+        <Link href="/forgot-password" className="block underline">Wachtwoord vergeten?</Link>
+        <p>Nog geen account? <Link href="/register" className="underline">Registreren</Link></p>
+    </Container>;
 }

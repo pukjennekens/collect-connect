@@ -90,4 +90,27 @@ class CatalogPagesTest extends TestCase
                 ->has('products.data', 1)
                 ->where('products.data.0.id', $matchProduct->id));
     }
+
+    public function test_set_uses_latest_inventory_and_exact_color_and_preserves_unavailable_parts(): void
+    {
+        $set = Set::factory()->create();
+        $old = \App\Models\Inventory::factory()->create(['set_id' => $set->id, 'version' => 1]);
+        $latest = \App\Models\Inventory::factory()->create(['set_id' => $set->id, 'version' => 2]);
+        $part = Part::factory()->create();
+        $red = Color::factory()->create();
+        $blue = Color::factory()->create();
+        $product = Product::factory()->create(['productable_type' => $part->getMorphClass(), 'productable_id' => $part->id, 'color_id' => $red->id, 'stock' => 5]);
+        \Illuminate\Support\Facades\DB::table('inventory_parts')->insert([
+            ['inventory_id' => $old->id, 'part_id' => $part->id, 'color_id' => $red->id, 'quantity' => 99, 'is_spare' => false],
+            ['inventory_id' => $latest->id, 'part_id' => $part->id, 'color_id' => $red->id, 'quantity' => 2, 'is_spare' => false],
+            ['inventory_id' => $latest->id, 'part_id' => $part->id, 'color_id' => $blue->id, 'quantity' => 3, 'is_spare' => true],
+        ]);
+        $this->get(route('sets.show', $set))->assertOk()->assertInertia(fn ($page) => $page
+            ->has('in_stock_parts', 1)->has('out_of_stock_parts', 1)
+            ->where('in_stock_parts.0.id', $product->id)->where('in_stock_parts.0.quantity_in_set', 2)
+            ->where('out_of_stock_parts.0.url', null)->where('out_of_stock_parts.0.quantity_in_set', 3)
+            ->where('out_of_stock_parts.0.is_spare', true));
+        $this->get(route('product.show', $product))->assertOk()->assertInertia(fn ($page) => $page->has('related_sets.data', 1)->where('related_sets.data.0.id', $set->id));
+        $this->get(route('sets.show', [$set, 'color_id' => $blue->id]))->assertOk()->assertInertia(fn ($page) => $page->has('in_stock_parts', 0)->has('out_of_stock_parts', 1));
+    }
 }

@@ -9,7 +9,7 @@ use App\Domain\Rebrickable\Mappers\Transformers\BooleanTransformer;
 
 class InventoryPartImportMapper extends BaseImportMapper
 {
-    protected string|array $uniqueKey = ['inventory_id', 'part_num', 'color_id', 'is_spare'];
+    protected string|array $uniqueKey = ['inventory_id', 'part_id', 'color_id', 'is_spare'];
 
     protected array $mapping = [
         'inventory_id' => 'inventory_id',

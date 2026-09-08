@@ -22,6 +22,7 @@ class Inventory extends Model
     protected $fillable = [
         'rebrickable_id',
         'set_id',
+        'version',
     ];
 
     /**
@@ -39,7 +40,7 @@ class Inventory extends Model
     {
         return $this
             ->belongsToMany(Part::class, 'inventory_parts')
-            ->using(InventoryPart::class);
+            ->withPivot(['color_id', 'quantity', 'is_spare'])->using(InventoryPart::class);
     }
 
     /**
@@ -49,7 +50,7 @@ class Inventory extends Model
     {
         return $this
             ->belongsToMany(Minifig::class, 'inventory_minifigs')
-            ->using(InventoryMinifig::class);
+            ->withPivot('quantity')->using(InventoryMinifig::class);
     }
 
     /**

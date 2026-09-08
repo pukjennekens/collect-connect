@@ -17,17 +17,21 @@ class ShippingMethod extends Model
         'track_trace',
         'countries',
         'is_active',
+        'rate_bands',
+        'country_regions',
+        'country_ids',
     ];
 
-    /**
-     * @return array<string, string>
-     */
+    /** @return array{track_trace: 'boolean', is_active: 'boolean', countries: 'array', rate_bands: 'array', country_regions: 'array', country_ids: 'array'} */
     protected function casts(): array
     {
         return [
             'track_trace' => 'boolean',
             'is_active' => 'boolean',
             'countries' => 'array',
+            'rate_bands' => 'array',
+            'country_regions' => 'array',
+            'country_ids' => 'array',
         ];
     }
 }

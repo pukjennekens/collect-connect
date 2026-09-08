@@ -17,6 +17,18 @@ class PaymentSimulationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private int $shippingMethodId;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->shippingMethodId = \App\Models\ShippingMethod::query()->create([
+            'bricqer_id' => 1, 'name' => 'PostNL Brievenbus (NL)', 'is_active' => true,
+            'country_regions' => ['NL' => 'NL'], 'country_ids' => ['NL' => 1],
+            'rate_bands' => [['shipping_code' => 'NL', 'weight_min' => 0, 'weight_max' => 100000, 'price' => '3.95']],
+        ])->id;
+    }
+
     public function test_checkout_redirects_to_the_gateway_payment_page_when_one_is_offered(): void
     {
         config(['payment.default' => 'testing']);
@@ -127,7 +139,7 @@ class PaymentSimulationTest extends TestCase
 
     private function productInCart(int $stock, int $priceCents): Product
     {
-        $part = Part::factory()->create();
+        $part = Part::factory()->create(['weight_grams' => 1]);
 
         return Product::factory()->create([
             'productable_type' => $part->getMorphClass(),
@@ -150,7 +162,7 @@ class PaymentSimulationTest extends TestCase
             'postal_code' => '1234AB',
             'city' => 'Amsterdam',
             'country_code' => 'NL',
-            'shipping_method_id' => 0,
+            'shipping_method_id' => $this->shippingMethodId,
             'payment_method' => 'ideal',
             'create_account' => false,
         ];

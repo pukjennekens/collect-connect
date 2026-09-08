@@ -13,7 +13,7 @@ class BricqerServiceProvider extends ServiceProvider
     {
         $this->app->bind(
             BricqerConnector::class,
-            fn (): BricqerConnector => new BricqerConnector(config('bricqer.domain'), config('bricqer.api_key')),
+            fn (): BricqerConnector => new BricqerConnector((string) config('bricqer.domain'), (string) config('bricqer.api_key')),
         );
 
         $this->app->bind(

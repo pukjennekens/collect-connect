@@ -19,6 +19,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class ProductResource extends JsonResource
 {
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         $this->loadMissing(ProductListingQuery::defaultWith());
@@ -27,11 +28,12 @@ class ProductResource extends JsonResource
 
         return [
             'id' => $this->id,
-            'stock' => $this->stock,
+            'stock' => $this->is_active ? $this->stock : 0,
+            'purchasable' => $this->isPurchasable(),
             'price' => $this->price,
             'title' => $this->getTitle(),
             'image' => $this->getImage(),
-            'lego_number' => $productable->bricklink_id,
+            'lego_number' => $productable?->bricklink_id,
             'rebrickable_id' => $productable->rebrickable_id ?? null,
             'type' => $productable instanceof Minifig ? 'minifig' : 'part',
             'category' => $productable instanceof Part
@@ -47,7 +49,7 @@ class ProductResource extends JsonResource
                     'id' => $product->id,
                     'stock' => $product->stock,
                     'price' => $product->price,
-                    'image' => $this->getPartImage($product->productable, $product->color_id),
+                    'image' => $this->getPartImage($productable, $product->color_id),
                     'color' => ColorResource::make($product->color),
                     'url' => route('product.show', $product, absolute: false),
                 ])
@@ -58,7 +60,7 @@ class ProductResource extends JsonResource
     protected function getTitle(): string
     {
         if ($this->productable instanceof Part || $this->productable instanceof Minifig) {
-            return (string) $this->productable->name;
+            return (string) ($this->commerce_title ?: $this->productable->name);
         }
 
         throw new Exception('Productable type not found');

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domain\Bricqer\Jobs;
 
+use App\Domain\Product\Services\StockService;
 use App\Integrations\Bricqer\DataTransferObjects\UnconsolidatedInventory\InventoryItem;
 use App\Integrations\Bricqer\Facades\Bricqer;
 use App\Models\Color;
 use App\Models\Minifig;
+use App\Models\Order;
 use App\Models\Part;
 use App\Models\Pivots\PartColor;
 use App\Models\Product;
@@ -19,6 +21,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
@@ -33,7 +36,7 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
     protected int $chunkSize = 1000;
 
     /**
-     * @var Collection<string, int>
+     * @var Collection<covariant string, int>
      */
     protected Collection $colorIdMap;
 
@@ -41,6 +44,10 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
      * @var list<int>
      */
     protected array $syncedProductIds = [];
+
+    public int $timeout = 1800;
+
+    public int $tries = 3;
 
     /**
      * @return array{
@@ -54,6 +61,21 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
      */
     public function handle(): array
     {
+        return Cache::lock(StockService::INTEGRATION_LOCK, 1900)->block(10, fn (): array => $this->synchronize());
+    }
+
+    /**
+     * @return array{
+     *     found: int,
+     *     color_unmatched: int,
+     *     item_not_found: int,
+     *     zeroed: int,
+     *     minifig_definitions_updated: int,
+     *     part_definitions_updated: int
+     * }
+     */
+    private function synchronize(): array
+    {
         $run = SyncRun::query()->create([
             'source' => 'bricqer_inventory',
             'status' => 'running',
@@ -61,6 +83,7 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
         ]);
 
         try {
+            $snapshotStarted = now();
             $this->colorIdMap = $this->retrieveColorIdMap();
             $this->syncedProductIds = [];
 
@@ -113,23 +136,31 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
                 Part::class,
             );
 
-            foreach (array_chunk($consolidated, $this->chunkSize) as $chunk) {
-                $chunkStats = $this->upsertProducts($chunk, $partIds, $minifigIds);
-                $stats['found'] += $chunkStats['found'];
-                $stats['color_unmatched'] += $chunkStats['color_unmatched'];
-                $stats['item_not_found'] += $chunkStats['item_not_found'];
-            }
+            DB::transaction(function () use ($consolidated, $partIds, $minifigIds, $snapshotStarted, &$stats): void {
+                // An imported order is not proof that Bricqer has deducted stock.
+                // Keep local holds through open/processing states; picker completion
+                // must precede the snapshot before handing inventory ownership back.
+                Order::query()->where('stock_held', true)->whereNotNull('exported_at')
+                    ->where('exported_at', '<', $snapshotStarted)->where('sync_status', 'synced')
+                    ->whereIn('fulfilment_status', ['packed', 'shipped', 'completed'])
+                    ->update(['stock_held' => false]);
+                foreach (array_chunk($consolidated, $this->chunkSize) as $chunk) {
+                    $chunkStats = $this->upsertProducts($chunk, $partIds, $minifigIds);
+                    $stats['found'] += $chunkStats['found'];
+                    $stats['color_unmatched'] += $chunkStats['color_unmatched'];
+                    $stats['item_not_found'] += $chunkStats['item_not_found'];
+                }
 
-            $stats['zeroed'] = $this->zeroStockForMissingProducts();
+                $stats['zeroed'] = $this->zeroStockForMissingProducts();
+            }, 3);
 
             $restockedIds = Product::query()
                 ->whereIn('id', $previouslyOutOfStock)
                 ->where('stock', '>', 0)
-                ->pluck('id')
-                ->all();
+                ->get(['id'])->map(fn (Product $product): int => $product->id)->values()->all();
 
             if ($restockedIds !== []) {
-                DispatchStockNotificationsJob::dispatch($restockedIds);
+                DispatchStockNotificationsJob::dispatch(array_values($restockedIds));
             }
 
             $run->update([
@@ -151,7 +182,7 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * @return Collection<string, int>
+     * @return Collection<covariant string, int>
      */
     protected function retrieveColorIdMap(): Collection
     {
@@ -162,7 +193,7 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * @return list<array{item_type: string, item_id: string, color_id: string, stock: int, price: int, definition_id: string}>
+     * @return list<array{item_type: string, item_id: string, color_id: string, stock: int, price: int, definition_id: string, title: string, definitions: array<int|string, int>}>
      */
     protected function consolidate(): array
     {
@@ -180,6 +211,9 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
 
             $colorId = $item->colorId !== '' ? $item->colorId : '0';
             $key = "{$item->itemType}_{$item->itemId}_{$colorId}";
+            if ($item->remainingQuantity < 0 || ! is_finite($item->price) || $item->price < 0) {
+                throw new RuntimeException('Invalid Bricqer stock or price; refusing to apply the feed.');
+            }
             $priceInCents = (int) round($item->price * 100);
             $definitionId = trim($item->definitionId);
 
@@ -191,12 +225,17 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
                     'stock' => $item->remainingQuantity,
                     'price' => $priceInCents,
                     'definition_id' => $definitionId,
+                    'title' => $item->description,
+                    'definitions' => ctype_digit($definitionId) && (int) $definitionId > 0 ? [$definitionId => $item->remainingQuantity] : [],
                 ];
 
                 continue;
             }
 
             $consolidated[$key]['stock'] += $item->remainingQuantity;
+            if (ctype_digit($definitionId) && (int) $definitionId > 0) {
+                $consolidated[$key]['definitions'][$definitionId] = ($consolidated[$key]['definitions'][$definitionId] ?? 0) + $item->remainingQuantity;
+            }
             $consolidated[$key]['price'] = max($consolidated[$key]['price'], $priceInCents);
             $consolidated[$key]['definition_id'] = $this->preferDefinitionId(
                 $consolidated[$key]['definition_id'],
@@ -241,9 +280,9 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * @param  list<array{item_type: string, item_id: string, color_id: string, stock: int, price: int, definition_id: string}>  $chunk
-     * @param  Collection<string, int>  $partIds
-     * @param  Collection<string, int>  $minifigIds
+     * @param  list<array{item_type: string, item_id: string, color_id: string, stock: int, price: int, definition_id: string, title: string, definitions: array<int|string, int>}>  $chunk
+     * @param  Collection<covariant string, int>  $partIds
+     * @param  Collection<covariant string, int>  $minifigIds
      * @return array{found: int, color_unmatched: int, item_not_found: int}
      */
     protected function upsertProducts(array $chunk, Collection $partIds, Collection $minifigIds): array
@@ -282,14 +321,24 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
                     continue;
                 }
 
-                $product = Product::updateOrCreate([
+                $product = Product::query()->firstOrNew([
                     'productable_type' => $morph,
                     'productable_id' => $entityId,
                     'color_id' => $colorId,
-                ], [
-                    'stock' => $row['stock'],
-                    'price' => $row['price'],
                 ]);
+                if ($product->exists) {
+                    $product = Product::query()->lockForUpdate()->findOrFail($product->id);
+                }
+                $product->fill([
+                    'stock' => max(0, $row['stock'] - ($product->exists ? app(StockService::class)->heldQuantity($product) : 0)),
+                    'bricqer_stock' => $row['stock'],
+                    'price' => $row['price'],
+                    'commerce_title' => $row['title'] ?: null,
+                    'source_definitions' => collect($row['definitions'])->map(fn (int $quantity, int|string $id): array => ['definition_id' => (int) $id, 'quantity' => $quantity])->values()->all(),
+                ]);
+                if ($product->isDirty()) {
+                    $product->save();
+                }
 
                 $this->syncedProductIds[] = $product->id;
                 $stats['found']++;
@@ -324,9 +373,9 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
      * Batch-fetches existing PartColor.bricqer_definition_id values for every part
      * this chunk may touch, so upsertProducts() doesn't run a SELECT per row.
      *
-     * @param  list<array{item_type: string, item_id: string, color_id: string, stock: int, price: int, definition_id: string}>  $chunk
-     * @param  Collection<string, int>  $partIds
-     * @return Collection<string, string>
+     * @param  list<array{item_type: string, item_id: string, color_id: string, stock: int, price: int, definition_id: string, title: string, definitions: array<int|string, int>}>  $chunk
+     * @param  Collection<covariant string, int>  $partIds
+     * @return Collection<covariant string, string>
      */
     protected function existingPartColorDefinitions(array $chunk, Collection $partIds): Collection
     {
@@ -357,8 +406,8 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * @param  list<array{item_type: string, item_id: string, color_id: string, stock: int, price: int, definition_id: string}>  $rows
-     * @param  Collection<string, int>  $entityIds
+     * @param  list<array{item_type: string, item_id: string, color_id: string, stock: int, price: int, definition_id: string, title: string, definitions: array<int|string, int>}>  $rows
+     * @param  Collection<covariant string, int>  $entityIds
      * @param  class-string<Part|Minifig>  $model
      */
     protected function applyDefinitionIdsFromInventory(array $rows, Collection $entityIds, string $itemType, string $model): int
@@ -383,7 +432,7 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
 
     /**
      * @param  class-string<Part|Minifig>  $model
-     * @param  Collection<string, int>  $entityIdsByBricklink
+     * @param  Collection<covariant string, int>  $entityIdsByBricklink
      * @param  array<string, string>  $definitionsByBricklink
      */
     protected function bulkUpdateDefinitionIds(string $model, Collection $entityIdsByBricklink, array $definitionsByBricklink): int
@@ -439,7 +488,7 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
     /**
      * @param  list<string>  $bricklinkIds
      * @param  class-string<Part|Minifig>  $model
-     * @return Collection<string, int>
+     * @return Collection<covariant string, int>
      */
     protected function mapBricklinkIds(array $bricklinkIds, string $model): Collection
     {
@@ -467,8 +516,8 @@ class SyncBricqerInventoryJob implements ShouldBeUnique, ShouldQueue
         }
 
         return Product::query()
-            ->where('stock', '>', 0)
             ->whereNotIn('id', array_unique($this->syncedProductIds))
-            ->update(['stock' => 0]);
+            ->where(fn ($q) => $q->where('stock', '!=', 0)->orWhere('bricqer_stock', '!=', 0))
+            ->update(['stock' => 0, 'bricqer_stock' => 0, 'source_definitions' => '[]']);
     }
 }

@@ -20,14 +20,14 @@ class StockBackInStockMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Weer op voorraad: '.$this->product->productable->name,
+            subject: 'Weer op voorraad: '.($this->product->productable->name ?? $this->product->commerce_title ?? 'Product'),
         );
     }
 
     public function content(): Content
     {
         return new Content(
-            htmlString: '<p>Goed nieuws! <strong>'.e($this->product->productable->name).'</strong> is weer op voorraad.</p>'
+            htmlString: '<p>Goed nieuws! <strong>'.e($this->product->productable->name ?? $this->product->commerce_title ?? 'Product').'</strong> is weer op voorraad.</p>'
                 .'<p><a href="'.e(route('product.show', $this->product)).'">Bekijk product</a></p>',
         );
     }

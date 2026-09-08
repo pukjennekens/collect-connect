@@ -1,31 +1,22 @@
+import {Head} from '@inertiajs/react';
 import Container from '../../components/Container';
 
-export default function CmsPage({ page }) {
-    const blocks = page.blocks ?? [];
+function ContentBlock({block}) {
+    const data = block.data ?? block;
+    if (block.type === 'heading') return <h2 className="text-xl font-semibold">{data.text}</h2>;
+    if (block.type === 'html') return <div className="prose max-w-none" dangerouslySetInnerHTML={{__html: data.html}} />;
+    if (block.type === 'image') return /^https?:\/\//i.test(data.src ?? '') ? <img loading="lazy" src={data.src} alt={data.alt ?? ''} className="max-w-full rounded-lg" /> : null;
+    return <p className="whitespace-pre-wrap">{data.text}</p>;
+}
 
-    return (
-        <Container className="max-w-4xl my-10 space-y-8">
-            <h1 className="text-3xl font-bold">{page.title}</h1>
-            {blocks.map((row, rowIndex) => (
-                <div key={rowIndex} className={`grid gap-4 grid-cols-1 md:grid-cols-${row.columns?.length || 1}`}>
-                    {(row.columns ?? []).map((col, colIndex) => (
-                        <div key={colIndex} className="space-y-3">
-                            {(col.blocks ?? []).map((block, blockIndex) => {
-                                if (block.type === 'heading') {
-                                    return <h2 key={blockIndex} className="text-xl font-semibold">{block.text}</h2>;
-                                }
-                                if (block.type === 'html') {
-                                    return <div key={blockIndex} className="prose max-w-none" dangerouslySetInnerHTML={{ __html: block.html }} />;
-                                }
-                                if (block.type === 'image') {
-                                    return <img key={blockIndex} src={block.src} alt={block.alt ?? ''} className="rounded-lg max-w-full" />;
-                                }
-                                return <p key={blockIndex}>{block.text}</p>;
-                            })}
-                        </div>
-                    ))}
-                </div>
-            ))}
-        </Container>
-    );
+export default function CmsPage({page}) {
+    const columns = ['md:grid-cols-1', 'md:grid-cols-2', 'md:grid-cols-3', 'md:grid-cols-4'];
+    return <Container className="my-10 max-w-4xl space-y-8">
+        <Head title={page.meta_title || page.title}><meta name="description" content={page.meta_description || ''} /></Head>
+        <h1 className="text-3xl font-bold">{page.title}</h1>
+        {(page.blocks ?? []).map((block, index) => block.columns ?
+            <div key={index} className={`grid grid-cols-1 gap-4 ${columns[Math.min(block.columns.length, 4) - 1] || columns[0]}`}>
+                {block.columns.map((column, key) => <div key={key} className="space-y-3">{(column.blocks ?? []).map((item, i) => <ContentBlock key={i} block={item} />)}</div>)}
+            </div> : <ContentBlock key={index} block={block} />)}
+    </Container>;
 }

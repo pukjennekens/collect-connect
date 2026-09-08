@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\StockNotifications;
 
-use App\Filament\Resources\StockNotifications\Pages\CreateStockNotification;
-use App\Filament\Resources\StockNotifications\Pages\EditStockNotification;
 use App\Filament\Resources\StockNotifications\Pages\ListStockNotifications;
 use App\Filament\Resources\StockNotifications\Schemas\StockNotificationForm;
 use App\Filament\Resources\StockNotifications\Tables\StockNotificationsTable;
@@ -21,6 +19,21 @@ class StockNotificationResource extends Resource
     protected static ?string $model = StockNotification::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return false;
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -43,8 +56,6 @@ class StockNotificationResource extends Resource
     {
         return [
             'index' => ListStockNotifications::route('/'),
-            'create' => CreateStockNotification::route('/create'),
-            'edit' => EditStockNotification::route('/{record}/edit'),
         ];
     }
 }

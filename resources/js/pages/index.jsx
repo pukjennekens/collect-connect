@@ -7,14 +7,14 @@ import SeoSection from '../components/Home/SeoSection.jsx';
 import TrendingProducts from '../components/Home/TrendingProducts.jsx';
 
 const PRIMARY_BANNER = {
-    title: 'Nu korting op heel veel steentjes',
+    title: 'Vind jouw ontbrekende steentjes',
     href: '/onderdelen',
     image: '/images/home/hero-sale.jpg',
 };
 
 const SECONDARY_BANNERS = [
-    { title: 'Nieuw binnen', href: '/onderdelen', image: '/images/home/hero-new.jpg' },
-    { title: 'Used', href: '/onderdelen', image: '/images/home/hero-used.png' },
+    { title: 'Minifiguren', href: '/minifiguren', image: '/images/elements/alien.png' },
+    { title: 'Ontdek sets', href: '/sets', image: '/images/elements/rocket.png' },
 ];
 
 /**
@@ -37,7 +37,7 @@ export default function Home({ trendingProducts = [], popularCategories = [] }) 
 
             <PopularCategories categories={popularCategories} />
 
-            <InstagramFeed />
+
 
             <SeoSection />
         </>

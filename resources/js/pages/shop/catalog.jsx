@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import Pagination from '../../components/UI/Pagination';
 import { Link, router } from '@inertiajs/react';
 import Container from '../../components/Container';
 import InlineProduct from '../../components/Shop/Products/InlineProduct';
@@ -10,8 +12,9 @@ const LISTING_PATHS = {
 };
 
 export default function CatalogPage({ title, type, query, products, filters, active }) {
+    const [loading, setLoading] = useState(false);
     const items = products?.data ?? products ?? [];
-    const meta = (products?.meta || products?.links) ? products : null;
+    const meta = products?.meta ?? null;
 
     function updateFilter(key, value) {
         const params = { ...active, [key]: value || undefined };
@@ -19,7 +22,7 @@ export default function CatalogPage({ title, type, query, products, filters, act
             if (params[k] == null || params[k] === '') delete params[k];
         });
         const path = LISTING_PATHS[type] ?? LISTING_PATHS.part;
-        router.get(path, params, { preserveState: true, preserveScroll: true });
+        router.get(path, params, { preserveState: true, preserveScroll: true, onStart: () => setLoading(true), onFinish: () => setLoading(false) });
     }
 
     return (
@@ -36,7 +39,7 @@ export default function CatalogPage({ title, type, query, products, filters, act
                             }}
                         >
                             <input
-                                name="q"
+                                aria-label="Zoek op naam of LEGO-nummer" name="q"
                                 defaultValue={query ?? ''}
                                 placeholder="Zoek op naam of LEGO-nummer..."
                                 className="w-full md:w-96 border border-gray-200 rounded-lg px-4 py-2"
@@ -48,11 +51,12 @@ export default function CatalogPage({ title, type, query, products, filters, act
 
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                 <aside className="space-y-6">
+                    {(active?.category_id || active?.color_id) && <button className="min-h-11 text-primary underline" onClick={() => router.get(LISTING_PATHS[type] ?? '/onderdelen', active?.q ? {q: active.q} : {})}>Filters wissen</button>}
                     {filters?.categories?.length > 0 && (
                         <div>
                             <h2 className="text-sm font-semibold text-gray-700 mb-2">Categorie</h2>
                             <select
-                                className="w-full border border-gray-200 rounded-md px-3 py-2"
+                                aria-label="Categorie" className="w-full border border-gray-200 rounded-md px-3 py-2"
                                 value={active?.category_id ?? ''}
                                 onChange={(e) => updateFilter('category_id', e.target.value)}
                             >
@@ -67,7 +71,7 @@ export default function CatalogPage({ title, type, query, products, filters, act
                         <div>
                             <h2 className="text-sm font-semibold text-gray-700 mb-2">Kleur</h2>
                             <select
-                                className="w-full border border-gray-200 rounded-md px-3 py-2"
+                                aria-label="Kleur" className="w-full border border-gray-200 rounded-md px-3 py-2"
                                 value={active?.color_id ?? ''}
                                 onChange={(e) => updateFilter('color_id', e.target.value)}
                             >
@@ -80,7 +84,8 @@ export default function CatalogPage({ title, type, query, products, filters, act
                     )}
                 </aside>
 
-                <div className="lg:col-span-3">
+                <div className="lg:col-span-3" aria-busy={loading}>
+                    <p role="status" className="mb-4 text-sm text-gray-600">{loading ? "Producten laden…" : `${meta?.total ?? items.length} producten`}</p>
                     {items.length === 0 ? (
                         <p className="text-gray-500">Geen producten gevonden.</p>
                     ) : (
@@ -97,20 +102,7 @@ export default function CatalogPage({ title, type, query, products, filters, act
                         </div>
                     )}
 
-                    {meta?.links && (
-                        <div className="mt-8 flex flex-wrap gap-2">
-                            {meta.links.map((link, i) => (
-                                link.url ? (
-                                    <Link
-                                        key={i}
-                                        href={link.url}
-                                        className={`px-3 py-1 rounded border text-sm ${link.active ? 'bg-primary text-white border-primary' : 'border-gray-200'}`}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                    />
-                                ) : null
-                            ))}
-                        </div>
-                    )}
+                    <Pagination pagination={products} />
                 </div>
             </div>
         </Container>

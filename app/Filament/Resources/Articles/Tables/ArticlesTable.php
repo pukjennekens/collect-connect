@@ -15,7 +15,10 @@ class ArticlesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->defaultSort('updated_at', 'desc')
             ->columns([
+                \Filament\Tables\Columns\IconColumn::make('is_published')->boolean(),
+                TextColumn::make('published_at')->dateTime()->sortable(),
                 TextColumn::make('title')
                     ->searchable(),
                 TextColumn::make('slug')
@@ -29,9 +32,7 @@ class ArticlesTable
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->filters([
-                //
-            ])
+            ->filters([\Filament\Tables\Filters\TernaryFilter::make('is_published')])
             ->recordActions([
                 EditAction::make(),
             ])

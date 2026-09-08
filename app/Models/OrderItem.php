@@ -18,7 +18,14 @@ class OrderItem extends Model
         'unit_price_cents',
         'quantity',
         'bricqer_definition_id',
+        'source_allocations',
     ];
+
+    /** @return array{source_allocations: 'array', quantity: 'integer', unit_price_cents: 'integer'} */
+    protected function casts(): array
+    {
+        return ['source_allocations' => 'array', 'quantity' => 'integer', 'unit_price_cents' => 'integer'];
+    }
 
     /**
      * @return BelongsTo<Order, $this>

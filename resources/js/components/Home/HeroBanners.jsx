@@ -14,7 +14,7 @@ export default function HeroBanners({ primary, secondary = [] }) {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <PromoBanner size="tall" {...primary} />
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1 lg:grid-rows-2">
+                <div className="grid grid-cols-1 gap-4 lg:grid-rows-2">
                     {secondary.map((banner) => (
                         <PromoBanner key={banner.title} {...banner} />
                     ))}

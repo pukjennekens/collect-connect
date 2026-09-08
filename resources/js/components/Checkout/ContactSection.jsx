@@ -32,7 +32,9 @@ export default function ContactSection({ form, user }) {
                     </label>
 
                     {form.data.create_account && (
+                        <>
                         <Input
+                            required
                             label="Wachtwoord"
                             type="password"
                             autoComplete="new-password"
@@ -40,6 +42,8 @@ export default function ContactSection({ form, user }) {
                             error={form.errors.password}
                             onChange={(e) => form.setData('password', e.target.value)}
                         />
+                        <Input label="Herhaal wachtwoord" type="password" required autoComplete="new-password" value={form.data.password_confirmation} error={form.errors.password_confirmation} onChange={e => form.setData('password_confirmation', e.target.value)} />
+                        </>
                     )}
                 </div>
             )}

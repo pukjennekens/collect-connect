@@ -7,11 +7,10 @@ namespace App\Models;
 use App\Http\Resources\ArticleResource;
 use Database\Factories\ArticleFactory;
 use Illuminate\Database\Eloquent\Attributes\UseResource;
-use Illuminate\Database\Eloquent\Attributes\UseResourceCollection;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-#[UseResourceCollection(ArticleResource::class)]
 #[UseResource(ArticleResource::class)]
 class Article extends Model
 {
@@ -37,6 +36,16 @@ class Article extends Model
             'is_published' => 'boolean',
             'published_at' => 'datetime',
         ];
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopePublished(Builder $query): Builder
+    {
+        return $query->where('is_published', true)->where(fn (Builder $query) => $query
+            ->whereNull('published_at')->orWhere('published_at', '<=', now()));
     }
 
     public function getRouteKeyName(): string

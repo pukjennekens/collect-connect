@@ -7,6 +7,7 @@ namespace App\Domain\Product\Queries;
 use App\Models\Minifig;
 use App\Models\Part;
 use App\Models\Product;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -25,7 +26,7 @@ final class ProductListingQuery
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<int|string, string|Closure>
      */
     public static function defaultWith(): array
     {
@@ -39,7 +40,7 @@ final class ProductListingQuery
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<int|string, string|Closure>
      */
     public static function forType(string $type): array
     {

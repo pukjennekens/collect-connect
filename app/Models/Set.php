@@ -62,12 +62,19 @@ class Set extends Model implements HasMedia
             ->format('webp');
     }
 
-    /**
-     * @return BelongsToMany<Inventory, $this, InventorySet>
-     */
-    /**
-     * @return HasMany<Inventory, $this>
-     */
+    /** @return \Illuminate\Database\Eloquent\Relations\BelongsTo<Theme, $this> */
+    public function theme(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Theme::class, 'theme_id', 'rebrickable_id');
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Relations\HasOne<Inventory, $this> */
+    public function latestInventory(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(Inventory::class)->ofMany(['version' => 'max', 'id' => 'max']);
+    }
+
+    /** @return HasMany<Inventory, $this> */
     public function inventories(): HasMany
     {
         return $this->hasMany(Inventory::class);

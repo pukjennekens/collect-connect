@@ -6,122 +6,87 @@ namespace App\Http\Controllers;
 
 use App\Domain\Product\Queries\ProductListingQuery;
 use App\Http\Resources\Set\SetResource;
+use App\Models\Color;
 use App\Models\Minifig;
 use App\Models\Part;
 use App\Models\PartCategory;
+use App\Models\Pivots\InventoryMinifig;
+use App\Models\Pivots\InventoryPart;
 use App\Models\Product;
 use App\Models\Set;
 use App\Support\MediaUrl;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Response;
 
 class SetController extends Controller
 {
     public function show(Request $request, Set $set): Response
     {
-        $set->load('media');
-
+        $set->load(['media', 'theme', 'latestInventory']);
         $categoryId = $request->integer('category_id') ?: null;
         $colorId = $request->integer('color_id') ?: null;
-
-        $partQuantities = DB::table('inventory_parts')
-            ->join('inventories', 'inventories.id', '=', 'inventory_parts.inventory_id')
-            ->where('inventories.set_id', $set->id)
-            ->groupBy('inventory_parts.part_id')
-            ->select('inventory_parts.part_id', DB::raw('SUM(inventory_parts.quantity) as quantity'))
-            ->pluck('quantity', 'part_id');
-
-        $minifigQuantities = DB::table('inventory_minifigs')
-            ->join('inventories', 'inventories.id', '=', 'inventory_minifigs.inventory_id')
-            ->where('inventories.set_id', $set->id)
-            ->groupBy('inventory_minifigs.minifig_id')
-            ->select('inventory_minifigs.minifig_id', DB::raw('SUM(inventory_minifigs.quantity) as quantity'))
-            ->pluck('quantity', 'minifig_id');
-
-        $partQuery = Product::query()
-            ->where('productable_type', (new Part)->getMorphClass())
-            ->whereIn('productable_id', $partQuantities->keys())
-            ->with(ProductListingQuery::forType('part'))
-            ->when($colorId, fn (Builder $builder) => $builder->where('color_id', $colorId))
-            ->when($categoryId, function (Builder $builder) use ($categoryId): void {
-                $builder->whereHasMorph('productable', [Part::class], fn (Builder $part) => $part->where('part_category_id', $categoryId));
+        $inventoryId = $set->latestInventory?->id;
+        $parts = InventoryPart::query()->where('inventory_id', $inventoryId)
+            ->with(['part.partColors.media', 'color'])
+            ->when($colorId, fn ($query) => $query->where('color_id', $colorId))
+            ->when($categoryId, fn ($query) => $query->whereHas('part', fn ($part) => $part->where('part_category_id', $categoryId)))
+            ->orderBy('part_id')->orderBy('color_id')->orderBy('is_spare')
+            ->paginate(48, ['*'], 'parts_page')->withQueryString();
+        $minifigs = InventoryMinifig::query()->where('inventory_id', $inventoryId)->with('minifig.media')->orderBy('minifig_id')->paginate(24, ['*'], 'minifigs_page')->withQueryString();
+        $products = Product::query()->where(function ($query) use ($parts, $minifigs): void {
+            $query->where(function ($query) use ($parts): void {
+                $query->where('productable_type', (new Part)->getMorphClass())->whereIn('productable_id', $parts->pluck('part_id'));
+            })->orWhere(function ($query) use ($minifigs): void {
+                $query->where('productable_type', (new Minifig)->getMorphClass())->whereIn('productable_id', $minifigs->pluck('minifig_id'));
             });
+        })->with(ProductListingQuery::defaultWith())->get();
+        $partItems = $parts->getCollection()->map(function (InventoryPart $row) use ($products): array {
+            $part = $row->part;
+            abort_if($part === null, 404);
+            $product = $products->first(fn (Product $product): bool => $product->productable_type === (new Part)->getMorphClass() && $product->productable_id === $row->part_id && $product->color_id === $row->color_id);
 
-        $partProducts = $partQuery->get()
-            ->sortByDesc('stock')
-            ->unique('productable_id')
-            ->values();
+            return $this->item($product, $part, $row->quantity, MediaUrl::forPart($part, $row->color_id), $row->color, (bool) $row->is_spare);
+        });
+        $minifigItems = $minifigs->getCollection()->map(function (InventoryMinifig $row) use ($products): array {
+            $minifig = $row->minifig;
+            abort_if($minifig === null, 404);
+            $product = $products->first(fn (Product $product): bool => $product->productable_type === (new Minifig)->getMorphClass() && $product->productable_id === $row->minifig_id);
 
-        $minifigProducts = Product::query()
-            ->where('productable_type', (new Minifig)->getMorphClass())
-            ->whereIn('productable_id', $minifigQuantities->keys())
-            ->with(ProductListingQuery::forType('minifig'))
-            ->get()
-            ->sortByDesc('stock')
-            ->values();
-
-        $mapPart = fn (Product $product): array => [
-            'id' => $product->id,
-            'title' => $product->productable->name,
-            'lego_number' => $product->productable->bricklink_id,
-            'image' => $this->getPartImage($product->productable, (int) $product->color_id),
-            'stock' => $product->stock,
-            'price' => $product->price,
-            'url' => route('product.show', $product->id),
-            'color' => $product->color ? ['name' => $product->color->name, 'hex' => $product->color->hex] : null,
-            'quantity_in_set' => (int) ($partQuantities[$product->productable_id] ?? 1),
-            'type' => 'part',
-        ];
-
-        $mapMinifig = fn (Product $product): array => [
-            'id' => $product->id,
-            'title' => $product->productable->name,
-            'lego_number' => $product->productable->bricklink_id,
-            'image' => $this->getMinifigImage($product->productable),
-            'stock' => $product->stock,
-            'price' => $product->price,
-            'url' => route('product.show', $product->id),
-            'color' => null,
-            'quantity_in_set' => (int) ($minifigQuantities[$product->productable_id] ?? 1),
-            'type' => 'minifig',
-        ];
-
-        $items = $partProducts->map($mapPart)->merge($minifigProducts->map($mapMinifig));
-
-        $isInStock = fn (array $item): bool => $item['stock'] > 0;
-        $inStock = $items->filter($isInStock)->values();
-        $outOfStock = $items->reject($isInStock)->values();
-
-        $categories = PartCategory::query()
-            ->whereIn('id', Part::query()
-                ->select('part_category_id')
-                ->whereIn('id', $partQuantities->keys()))
-            ->orderBy('name')
-            ->get(['id', 'name']);
+            return $this->item($product, $minifig, $row->quantity, MediaUrl::forMinifig($minifig));
+        });
+        $items = $partItems->merge($minifigItems);
+        $allParts = InventoryPart::query()->where('inventory_id', $inventoryId);
 
         return inertia('sets/show', [
             'set' => SetResource::make($set),
-            'in_stock_parts' => $inStock,
-            'out_of_stock_parts' => $outOfStock,
+            'theme' => $set->theme?->name,
+            'parts' => [...$parts->toArray(), 'data' => $partItems],
+            'minifigs' => [...$minifigs->toArray(), 'data' => $minifigItems],
+            'in_stock_parts' => $items->filter(fn (array $item): bool => $item['stock'] > 0)->values(),
+            'out_of_stock_parts' => $items->filter(fn (array $item): bool => $item['stock'] <= 0)->values(),
             'filters' => [
-                'categories' => $categories,
+                'categories' => PartCategory::query()->whereIn('id', Part::query()->select('part_category_id')->whereIn('id', (clone $allParts)->select('part_id')))->orderBy('name')->get(['id', 'name']),
+                'colors' => Color::query()->whereIn('id', (clone $allParts)->select('color_id'))->orderBy('name')->get(['id', 'name']),
             ],
-            'active' => [
-                'category_id' => $categoryId,
-                'color_id' => $colorId,
-            ],
+            'active' => ['category_id' => $categoryId, 'color_id' => $colorId],
         ]);
     }
 
-    private function getPartImage(Part $part, int $colorId): ?string
+    /** @return array<string, mixed> */
+    private function item(?Product $product, Part|Minifig $entity, int $quantity, ?string $image, ?Color $color = null, bool $spare = false): array
     {
-        return MediaUrl::forPart($part, $colorId);
-    }
-
-    private function getMinifigImage(Minifig $minifig): ?string
-    {
-        return MediaUrl::forMinifig($minifig);
+        return [
+            'id' => $product?->id,
+            'title' => $product?->commerce_title ?: $entity->name,
+            'lego_number' => $entity->bricklink_id ?: $entity->rebrickable_id,
+            'image' => $image,
+            'stock' => $product?->is_active ? $product->stock : 0,
+            'price' => $product?->price,
+            'url' => $product ? route('product.show', $product) : null,
+            'color' => $color ? ['name' => $color->name, 'hex' => $color->hex] : null,
+            'quantity_in_set' => $quantity,
+            'is_spare' => $spare,
+            'type' => $entity instanceof Part ? 'part' : 'minifig',
+        ];
     }
 }

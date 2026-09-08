@@ -12,7 +12,7 @@ class InventorySetImportMapper extends BaseImportMapper
 
     protected array $mapping = [
         'inventory_id' => 'inventory_id',
-        'set_num' => 'set_num',
+        'set_num' => 'set_id',
         'quantity' => 'quantity',
     ];
 }

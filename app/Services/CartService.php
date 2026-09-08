@@ -8,76 +8,24 @@ use App\Models\Minifig;
 use App\Models\Part;
 use App\Models\Pivots\PartColor;
 use App\Models\Product;
+use App\Models\User;
 use App\Support\MediaUrl;
-use Binafy\LaravelCart\Drivers\Driver;
-use Binafy\LaravelCart\LaravelCart;
+use Binafy\LaravelCart\Models\Cart;
+use Closure;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class CartService
 {
-    /**
-     * Must stay in sync with LaravelCartSession::SESSION_KEY_PREFIX.
-     */
     private const SESSION_KEY_PREFIX = 'cart_';
 
-    /**
-     * @return list<string>
-     */
-    public function revalidateStock(): array
-    {
-        $messages = [];
-        $raw = $this->getRawItems();
-        $changed = false;
-
-        if ($raw === []) {
-            return $messages;
-        }
-
-        $products = Product::query()
-            ->whereIn('id', array_column($raw, 'itemable_id'))
-            ->get()
-            ->keyBy('id');
-
-        $next = [];
-
-        foreach ($raw as $item) {
-            $product = $products->get($item['itemable_id'] ?? 0);
-
-            if ($product === null || $product->stock <= 0) {
-                $messages[] = 'Een artikel is niet meer beschikbaar en is uit je winkelwagen gehaald.';
-                $changed = true;
-
-                continue;
-            }
-
-            if ($item['quantity'] > $product->stock) {
-                $item['quantity'] = $product->stock;
-                $messages[] = "Voorraad bijgewerkt voor product #{$product->id}.";
-                $changed = true;
-            }
-
-            $next[] = $item;
-        }
-
-        if ($changed) {
-            session()->put($this->sessionKey(), $next);
-        }
-
-        return array_values(array_unique($messages));
-    }
-
-    /**
-     * Returns the authenticated user ID or a session-scoped guest UUID.
-     * Always returns a non-null string to avoid the session driver's null-userId TypeError.
-     */
     protected function userId(): string
     {
         if (auth()->check()) {
             return (string) auth()->id();
         }
-
         if (! session()->has('cart_guest_id')) {
             session()->put('cart_guest_id', (string) Str::uuid());
         }
@@ -85,134 +33,197 @@ class CartService
         return (string) session('cart_guest_id');
     }
 
-    protected function driver(): Driver
-    {
-        return LaravelCart::driver('session');
-    }
-
     protected function sessionKey(): string
     {
         return self::SESSION_KEY_PREFIX.$this->userId();
     }
 
-    /**
-     * @return array<int, array{itemable_id: int, itemable_type: string, quantity: int}>
-     */
+    /** @return array<int, array{itemable_id: int, itemable_type: string, quantity: int}> */
     public function getRawItems(): array
     {
-        return session($this->sessionKey(), []);
+        if (! auth()->check()) {
+            return session($this->sessionKey(), []);
+        }
+
+        if (session()->has($this->sessionKey())) {
+            $this->mergeGuestCartIntoUser(auth()->id() ?? abort(401));
+        }
+
+        return $this->databaseItems((string) auth()->id());
+    }
+
+    /** @return array<int, array{itemable_id: int, itemable_type: string, quantity: int}> */
+    private function databaseItems(string $userId): array
+    {
+        $cart = Cart::query()->without('items')->where('user_id', $userId)->first();
+
+        return $cart?->items()->where('itemable_type', Product::class)->get()
+            ->map(fn ($item): array => [
+                'itemable_id' => (int) $item->getAttribute('itemable_id'),
+                'itemable_type' => Product::class,
+                'quantity' => (int) $item->getAttribute('quantity'),
+            ])->all() ?? [];
+    }
+
+    /** @param array<int, array{itemable_id: int, itemable_type: string, quantity: int}> $items */
+    private function storeDatabaseItems(string $userId, array $items): void
+    {
+        $cart = Cart::query()->without('items')->firstOrCreate(['user_id' => $userId]);
+        $ids = array_column($items, 'itemable_id');
+        $cart->items()->whereNotIn('itemable_id', $ids)->delete();
+        $existing = $cart->items()->get()->keyBy('itemable_id');
+        foreach ($items as $item) {
+            $line = $existing->get($item['itemable_id']);
+            if ($line === null) {
+                $cart->items()->create($item);
+            } elseif ((int) $line->getAttribute('quantity') !== $item['quantity']) {
+                $line->update(['quantity' => $item['quantity']]);
+            }
+        }
     }
 
     /**
-     * @return array{itemable_id: int, itemable_type: string, quantity: int}|null
+     * Serialize all account cart changes, including first creation, with the user row.
+     * Guest requests use Laravel route session blocking.
+     *
+     * @param  Closure(array<int, array{itemable_id: int, itemable_type: string, quantity: int}>): array<int, array{itemable_id: int, itemable_type: string, quantity: int}>  $change
      */
-    protected function findRawItem(Product $product): ?array
+    private function mutate(Closure $change): void
     {
-        foreach ($this->getRawItems() as $item) {
-            if (isset($item['itemable_id']) && $item['itemable_id'] === $product->getKey()) {
-                return $item;
-            }
+        if (! auth()->check()) {
+            session()->put($this->sessionKey(), $change($this->getRawItems()));
+
+            return;
         }
 
-        return null;
+        if (session()->has($this->sessionKey())) {
+            $this->mergeGuestCartIntoUser(auth()->id() ?? abort(401));
+        }
+
+        DB::transaction(function () use ($change): void {
+            $userId = (string) auth()->id();
+            User::query()->lockForUpdate()->findOrFail($userId);
+            $items = $this->databaseItems($userId);
+            $next = $change($items);
+            if ($next !== $items) {
+                $this->storeDatabaseItems($userId, $next);
+            }
+        }, 3);
+    }
+
+    /** @return list<string> */
+    public function revalidateStock(): array
+    {
+        $messages = [];
+        $this->mutate(function (array $items) use (&$messages): array {
+            $products = Product::query()->with('productable')->whereIn('id', array_column($items, 'itemable_id'))->get()->keyBy('id');
+            $next = [];
+            foreach ($items as $item) {
+                $product = $products->get($item['itemable_id']);
+                if ($product === null || ! $product->isPurchasable()) {
+                    $messages[] = 'Een artikel is niet meer beschikbaar en is uit je winkelwagen gehaald.';
+
+                    continue;
+                }
+                if ($item['quantity'] > $product->stock) {
+                    $item['quantity'] = $product->stock;
+                    $messages[] = "Voorraad bijgewerkt voor product #{$product->id}.";
+                }
+                $next[] = $item;
+            }
+
+            return $next;
+        });
+
+        return array_values(array_unique($messages));
     }
 
     public function addItem(Product $product, int $quantity): void
     {
-        $userId = $this->userId();
-        $existing = $this->findRawItem($product);
-
-        if ($existing !== null) {
-            $delta = min($existing['quantity'] + $quantity, $product->stock) - $existing['quantity'];
-
-            if ($delta > 0) {
-                $this->driver()->increaseQuantity($product, $delta, $userId);
-            }
-
-            return;
-        }
-
-        $raw = $this->getRawItems();
-        $raw[] = [
-            'itemable_id' => $product->getKey(),
-            'itemable_type' => Product::class,
-            'quantity' => min($quantity, max(0, $product->stock)),
-        ];
-        session()->put($this->sessionKey(), $raw);
-    }
-
-    public function removeItem(Product $product): void
-    {
-        $this->driver()->removeItem($product, $this->userId());
+        $this->changeQuantity($product, $quantity, true);
     }
 
     public function setQuantity(Product $product, int $quantity): void
     {
-        $existing = $this->findRawItem($product);
+        $this->changeQuantity($product, $quantity, false);
+    }
 
-        if ($existing === null) {
-            return;
-        }
+    private function changeQuantity(Product $product, int $quantity, bool $add): void
+    {
+        $this->mutate(function (array $items) use ($product, $quantity, $add): array {
+            $product = $product->fresh();
+            if ($product === null) {
+                return $items;
+            }
+            $byId = collect($items)->keyBy('itemable_id');
+            $existing = $byId->get($product->id);
+            if (! $add && $existing === null) {
+                return $items;
+            }
+            $requested = $add ? ($existing['quantity'] ?? 0) + max(0, $quantity) : $quantity;
+            $capped = $product->isPurchasable() ? max(0, min($requested, $product->stock)) : 0;
+            if ($capped === 0) {
+                $byId->forget($product->id);
+            } else {
+                $byId->put($product->id, ['itemable_id' => $product->id, 'itemable_type' => Product::class, 'quantity' => $capped]);
+            }
 
-        $cappedQty = min($quantity, $product->stock);
-        $delta = $cappedQty - $existing['quantity'];
-        $userId = $this->userId();
+            return $byId->values()->all();
+        });
+    }
 
-        if ($delta > 0) {
-            $this->driver()->increaseQuantity($product, $delta, $userId);
-        } elseif ($delta < 0) {
-            $this->driver()->decreaseQuantity($product, abs($delta), $userId);
-        }
+    public function removeItem(Product $product): void
+    {
+        $this->mutate(fn (array $items): array => array_values(array_filter(
+            $items, fn (array $item): bool => (int) $item['itemable_id'] !== $product->id,
+        )));
     }
 
     public function clear(): void
     {
-        $this->driver()->emptyCart($this->userId());
+        $this->mutate(fn (array $items): array => []);
     }
 
     public function mergeGuestCartIntoUser(int|string $userId): void
     {
-        $guestKey = self::SESSION_KEY_PREFIX.(string) session('cart_guest_id');
-        $userKey = self::SESSION_KEY_PREFIX.(string) $userId;
+        $guestId = session('cart_guest_id');
+        $guestKey = self::SESSION_KEY_PREFIX.(string) $guestId;
         $guestItems = session($guestKey, []);
-
-        if ($guestItems === []) {
+        $legacyKey = self::SESSION_KEY_PREFIX.(string) $userId;
+        $legacyItems = session($legacyKey, []);
+        if ($guestItems === [] && $legacyItems === []) {
             return;
         }
 
-        $userItems = session($userKey, []);
-        $byId = collect($userItems)->keyBy('itemable_id');
-
-        foreach ($guestItems as $item) {
-            $id = $item['itemable_id'] ?? null;
-            if ($id === null) {
-                continue;
+        DB::transaction(function () use ($userId, $guestId, $guestItems, $legacyItems): void {
+            User::query()->lockForUpdate()->findOrFail($userId);
+            if ($guestId !== null && DB::table('cart_guest_merges')->where('guest_id', $guestId)->exists()) {
+                return;
             }
-            if ($byId->has($id)) {
-                $byId[$id]['quantity'] = ($byId[$id]['quantity'] ?? 0) + ($item['quantity'] ?? 0);
-            } else {
-                $byId[$id] = $item;
+            $items = collect($this->databaseItems((string) $userId))->keyBy('itemable_id');
+            foreach ([...$legacyItems, ...$guestItems] as $item) {
+                $id = (int) ($item['itemable_id'] ?? 0);
+                $existing = $items->get($id);
+                $items->put($id, ['itemable_id' => $id, 'itemable_type' => Product::class,
+                    'quantity' => ($existing['quantity'] ?? 0) + (int) ($item['quantity'] ?? 0)]);
             }
-        }
+            $products = Product::query()->with('productable')->whereIn('id', $items->keys())->get()->keyBy('id');
+            $merged = $items->map(function (array $item) use ($products): array {
+                $product = $products->get($item['itemable_id']);
+                $item['quantity'] = $product?->isPurchasable() ? max(0, min($item['quantity'], $product->stock)) : 0;
 
-        $productStocks = Product::query()
-            ->whereIn('id', $byId->keys()->all())
-            ->pluck('stock', 'id');
-
-        $merged = $byId->map(function (array $item) use ($productStocks): array {
-            $id = $item['itemable_id'] ?? null;
-            $stock = (int) ($productStocks[$id] ?? 0);
-            $item['quantity'] = max(0, min((int) ($item['quantity'] ?? 0), $stock));
-
-            return $item;
-        })->filter(fn (array $item): bool => ($item['quantity'] ?? 0) > 0)->values()->all();
-
-        session()->put($userKey, $merged);
-        session()->forget($guestKey);
+                return $item;
+            })->filter(fn (array $item): bool => $item['quantity'] > 0)->values()->all();
+            $this->storeDatabaseItems((string) $userId, $merged);
+            if ($guestId !== null) {
+                DB::table('cart_guest_merges')->insert(['guest_id' => $guestId, 'user_id' => $userId, 'created_at' => now()]);
+            }
+        }, 3);
+        session()->forget([$guestKey, $legacyKey, 'cart_guest_id']);
     }
 
     /**
-     * @return Collection<int, array{id: int, name: string, image: string|null, price: float, quantity: int, stock: int, color: string|null, color_hex: string|null, lego_number: string|null, weight_grams: float|null}>
+     * @return Collection<int, array{id: int, name: string, lego_number: string|null, image: string|null, price: float, quantity: int, stock: int, color: string|null, color_hex: string|null, weight_grams: float|null}>
      */
     public function getItems(): Collection
     {
@@ -227,10 +238,11 @@ class CartService
         $products = Product::whereIn('id', $productIds)
             ->with([
                 'color',
-                'productable' => fn (MorphTo $morphTo) => $morphTo->morphWith([
-                    Part::class => ['partColors.media'],
-                    Minifig::class => ['media'],
-                ]),
+                'productable' => function ($relation): void {
+                    if ($relation instanceof MorphTo) {
+                        $relation->morphWith([Part::class => ['partColors.media'], Minifig::class => ['media']]);
+                    }
+                },
             ])
             ->get()
             ->keyBy('id');
@@ -240,7 +252,7 @@ class CartService
                 /** @var Product|null $product */
                 $product = $products[$item['itemable_id']] ?? null;
 
-                if ($product === null) {
+                if ($product === null || $product->productable === null) {
                     return null;
                 }
 
@@ -249,7 +261,7 @@ class CartService
                     'name' => $product->productable->name,
                     'lego_number' => $product->productable->bricklink_id ?? null,
                     'image' => $this->imageFor($product),
-                    'price' => $product->price / 100,
+                    'price' => $product->getPrice(),
                     'quantity' => $item['quantity'],
                     'stock' => $product->stock,
                     'color' => $product->color?->name,

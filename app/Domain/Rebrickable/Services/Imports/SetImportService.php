@@ -34,6 +34,10 @@ class SetImportService extends BaseImportService
             ->whereNotNull('img_url')
             ->whereDoesntHave('media', fn ($query) => $query->where('collection_name', Set::IMAGE_COLLECTION))
             ->lazyById()
-            ->each(fn (Set $set) => ImportSetImageJob::dispatch($set->id, $set->img_url));
+            ->each(function (Set $set): void {
+                if ($set->img_url !== null && $set->img_url !== '') {
+                    ImportSetImageJob::dispatch($set->id, $set->img_url);
+                }
+            });
     }
 }

@@ -30,6 +30,7 @@ class ImportMinifigImageJobTest extends TestCase
         parent::setUp();
 
         Storage::fake('public');
+        config(['media-library.queue_conversions_by_default' => false]);
 
         config([
             'bricqer.domain' => 'test.bricqer.com',

@@ -8,6 +8,7 @@ use App\Http\Requests\Shop\StoreStockNotificationRequest;
 use App\Models\Product;
 use App\Models\StockNotification;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Cache;
 
 class StockNotificationController extends Controller
 {
@@ -19,10 +20,13 @@ class StockNotificationController extends Controller
             return back()->with('status', 'Dit product is al op voorraad.');
         }
 
-        StockNotification::query()->firstOrCreate([
+        $subscription = StockNotification::query()->firstOrCreate([
             'product_id' => $product->id,
-            'email' => strtolower($validated['email']),
+            'email' => strtolower(trim($validated['email'])),
         ]);
+        Cache::lock('stock-notification:'.$subscription->id, 120)->block(5, function () use ($subscription): void {
+            $subscription->refresh()->update(['notified_at' => null]);
+        });
 
         return back()->with('status', 'We mailen je zodra dit product weer op voorraad is.');
     }

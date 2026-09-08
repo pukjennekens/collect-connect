@@ -24,14 +24,43 @@ class Product extends Model implements Cartable
         'stock',
         'price',
         'color_id',
+        'is_active',
+        'bricqer_stock',
+        'source_definitions',
+        'commerce_title',
     ];
+
+    protected $attributes = ['is_active' => true];
+
+    /** @return array{is_active: 'boolean', source_definitions: 'array', stock: 'integer', price: 'integer', bricqer_stock: 'integer'} */
+    protected function casts(): array
+    {
+        return ['is_active' => 'boolean', 'source_definitions' => 'array', 'stock' => 'integer', 'price' => 'integer', 'bricqer_stock' => 'integer'];
+    }
+
+    public function isPurchasable(): bool
+    {
+        return $this->is_active && $this->stock > 0 && $this->productable !== null;
+    }
+
+    /**
+     * @param  Builder<Product>  $query
+     * @return Builder<Product>
+     */
+    public function scopePurchasable(Builder $query): Builder
+    {
+        return $query->where('is_active', true)->where('stock', '>', 0);
+    }
 
     /**
      * @return MorphTo<Part|Minifig, $this>
      */
     public function productable(): MorphTo
     {
-        return $this->morphTo('productable');
+        /** @var MorphTo<Part|Minifig, $this> $relationship */
+        $relationship = $this->morphTo('productable');
+
+        return $relationship;
     }
 
     /**
@@ -61,7 +90,7 @@ class Product extends Model implements Cartable
         $type = $productable instanceof Minifig ? 'minifig' : 'part';
         $categoryId = $productable instanceof Part ? $productable->part_category_id : null;
         $categoryName = $productable instanceof Part
-            ? ($productable->partCategory?->name ?? '')
+            ? ($productable->partCategory->name ?? '')
             : '';
 
         return [
@@ -72,7 +101,7 @@ class Product extends Model implements Cartable
             'stock' => (int) $this->stock,
             'type' => $type,
             'color_id' => (int) ($this->color_id ?? 0),
-            'color_name' => (string) ($this->color?->name ?? ''),
+            'color_name' => (string) ($this->color->name ?? ''),
             'category_id' => (int) ($categoryId ?? 0),
             'category_name' => (string) $categoryName,
         ];
@@ -90,7 +119,7 @@ class Product extends Model implements Cartable
     /**
      * Eager-load shape used when building the Scout search index payload.
      *
-     * @return array<string, mixed>
+     * @return array<int|string, mixed>
      */
     private static function searchEagerLoad(): array
     {
